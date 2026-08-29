@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitcoin-block-archive"
+version = "0.1.0"
+description = "Archive completed Bitcoin Core blk*.dat files to S3-compatible storage"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9"]
+
+[dependency-groups]
+dev = ["ruff>=0.6", "mypy>=1.11"]
+
+[tool.setuptools]
+packages = ["bitcoin_block_archive"]
+package-dir = {bitcoin_block_archive = "src/bitcoin_block_archive"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.mypy]
+files = ["src", "tests"]
+python_version = "3.10"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "bitcoin_block_archive.*"
+disallow_any_expr = true
+disallow_any_explicit = true
+disallow_any_unimported = true
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
