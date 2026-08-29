@@ -1,7 +1,7 @@
 # Runtime image for scheduled archive passes. The Bitcoin Core image already
 # contains bitcoin-cli plus every shared library it needs; add Python and
 # s5cmd instead of copying a single potentially incompatible binary out of it.
-FROM bitcoin/bitcoin:29.1-alpine
+FROM bitcoin/bitcoin:29.1
 
 USER root
 
@@ -11,7 +11,15 @@ ARG TARGETARCH
 WORKDIR /app
 
 RUN set -eux; \
-    apk add --no-cache bash ca-certificates curl py3-pip python3 tar; \
+    apt-get update; \
+    apt-get install --yes --no-install-recommends \
+      bash \
+      ca-certificates \
+      curl \
+      python3 \
+      python3-venv \
+      tar; \
+    rm -rf /var/lib/apt/lists/*; \
     case "${TARGETARCH:-$(uname -m)}" in \
       amd64|x86_64) s5arch=64bit ;; \
       arm64|aarch64) s5arch=ARM64 ;; \
