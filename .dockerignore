@@ -1,0 +1,11 @@
+.git
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+bitcoin_block_archive.egg-info
+bitcoin_core_s3_archive.egg-info
+build
+dist
+tests
+uv.lock

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-LOG = logging.getLogger("bitcoin-s3-archive")
+LOG = logging.getLogger("bitcoin-block-archive")
 
 
 def configure(*, verbose: bool) -> None:

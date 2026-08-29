@@ -71,7 +71,7 @@ wheels = [
 ]
 
 [[package]]
-name = "bitcoin-core-s3-archive"
+name = "bitcoin-block-archive"
 version = "0.1.0"
 source = { editable = "." }
 

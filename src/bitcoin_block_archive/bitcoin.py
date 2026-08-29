@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.errors import ArchiveError
-from bitcoin_s3_archive.logging_setup import LOG
-from bitcoin_s3_archive.process import run
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.logging_setup import LOG
+from bitcoin_block_archive.process import run
 
 
 def cli(

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_s3_archive.config import Config
+from bitcoin_block_archive.config import Config
 
 
 @pytest.fixture

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.state import (
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.state import (
     already_archived,
     marker_path,
     write_marker,

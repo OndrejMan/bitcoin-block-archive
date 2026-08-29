@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_s3_archive.blockfile import block_hash, first_block_hash
-from bitcoin_s3_archive.errors import ArchiveError
+from bitcoin_block_archive.blockfile import block_hash, first_block_hash, last_block_hash
+from bitcoin_block_archive.errors import ArchiveError
 from tests.conftest import fake_header, write_block_file
 
 
@@ -23,6 +23,7 @@ def test_first_block_hash_reads_only_the_first_record(tmp_path: Path) -> None:
     write_block_file(target, [fake_header(1), fake_header(2)])
 
     assert first_block_hash(target) == block_hash(fake_header(1))
+    assert last_block_hash(target) == block_hash(fake_header(2))
 
 
 def test_empty_file_holds_no_block(tmp_path: Path) -> None:

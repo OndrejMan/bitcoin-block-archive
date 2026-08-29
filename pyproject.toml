@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bitcoin-core-s3-archive"
+name = "bitcoin-block-archive"
 version = "0.1.0"
 description = "Archive completed Bitcoin Core blk*.dat files to S3-compatible storage"
 readme = "README.md"
@@ -18,11 +18,11 @@ test = ["pytest>=8,<9"]
 dev = ["ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
-bitcoin-s3-archive = "bitcoin_s3_archive.cli:main"
+bitcoin-block-archive = "bitcoin_block_archive.cli:main"
 
 [tool.setuptools]
-packages = ["bitcoin_s3_archive"]
-package-dir = {bitcoin_s3_archive = "src/bitcoin_s3_archive"}
+packages = ["bitcoin_block_archive"]
+package-dir = {bitcoin_block_archive = "src/bitcoin_block_archive"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

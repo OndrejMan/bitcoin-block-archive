@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bitcoin_s3_archive.bitcoin import (
+from bitcoin_block_archive.bitcoin import (
     block_height,
     chain_height,
     prune_blockchain,
 )
-from bitcoin_s3_archive.blockfile import first_block_hash
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.logging_setup import LOG
-from bitcoin_s3_archive.state import already_archived
+from bitcoin_block_archive.blockfile import first_block_hash
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.logging_setup import LOG
+from bitcoin_block_archive.state import already_archived
 
 
 def unarchived_blocks(config: Config) -> list[Path]:

@@ -1,12 +1,14 @@
-# bitcoin-core-s3-archive
+# bitcoin-block-archive
 
 Archives completed Bitcoin Core `blk*.dat` files to S3-compatible storage
 (CESNET S3 by default) using [`s5cmd`](https://github.com/peak/s5cmd), so a
 pruned node can keep serving while the full block history stays available for
 BlockSci parsing.
 
-Each block file is uploaded together with a `.sha256` sidecar, and a JSON
-marker in the state directory records what has already been archived. With
+Each block file is uploaded together with a `.sha256` sidecar. A JSON marker
+in the state directory records what has already been archived and every pass
+publishes `archive-manifest.json` in the S3 destination: a deterministic,
+checksummed inventory for BlockSci restore jobs. With
 `--prune-after-archive` the tool also drives pruning itself, so blocks are
 deleted only once they are known to be in S3.
 
@@ -19,15 +21,50 @@ uv sync                      # or: pip install -e .
 ## Usage
 
 ```bash
-bitcoin-s3-archive \
+bitcoin-block-archive \
   --block-dir /var/lib/bitcoin/blocks \
   --state-dir /var/lib/bitcoin/.s3-archive \
   --destination s3://xman-coinjoin/bitcoin-mainnet/blocks \
   --profile coinjoin
 
-python -m bitcoin_s3_archive --help   # equivalent, without installing a script
+python -m bitcoin_block_archive --help   # equivalent, without installing a script
 ./script.py --help                    # compatibility shim, runs from the source tree
 ```
+
+## Docker
+
+The image contains the Python package, `s5cmd`, and `bitcoin-cli`. For the
+complete deployment use Compose: it starts a persistent mainnet Bitcoin Core
+container and the `archiver` service performs one archive pass through the
+private Docker network. Both share a persistent Core datadir; the archiver
+mounts it read-only and uses Core's cookie authentication. The entrypoint
+creates a temporary `s5cmd` credentials profile from environment variables, so
+no AWS file is mounted into either container.
+
+```bash
+cp .env.example .env
+# Edit .env and insert the two S3 secrets.
+docker compose up -d bitcoin-core
+docker compose logs -f bitcoin-core
+```
+
+The first IBD is a full mainnet synchronization and can take a long time and
+substantial disk space. Once `initialblockdownload` is `false`, run one pass:
+
+```bash
+docker compose exec bitcoin-core bitcoin-cli -datadir=/bitcoin getblockchaininfo
+docker compose --profile archive run --rm archiver
+```
+
+Run the latter command periodically from cron/systemd. Compose starts Core
+with `prune=1` (manual pruning); the default archiver command is upload-only.
+Add `--prune-after-archive` to the `archiver.command` only after confirming
+the archived S3 objects and manifest.
+
+The standalone image can still target an already-running node by mounting its
+datadir and passing `--bitcoin-cli` as needed.
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are accepted as aliases for
+the two `S3_*` secret variables; `S3_PROFILE` defaults to `coinjoin`.
 
 Useful flags:
 
@@ -74,7 +111,7 @@ only when `--min-free-space` is actually breached, which is the setup worth
 running:
 
 ```bash
-bitcoin-s3-archive --prune-after-archive --min-free-space 20G
+bitcoin-block-archive --prune-after-archive --min-free-space 20G
 ```
 
 Notes:

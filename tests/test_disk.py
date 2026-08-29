@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from bitcoin_s3_archive.disk import format_size, parse_size
-from bitcoin_s3_archive.errors import ArchiveError
+from bitcoin_block_archive.disk import format_size, parse_size
+from bitcoin_block_archive.errors import ArchiveError
 
 
 @pytest.mark.parametrize(

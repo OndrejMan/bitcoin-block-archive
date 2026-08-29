@@ -1,6 +1,6 @@
 # Design log
 
-Working notes for `bitcoin-core-s3-archive`. Written 2026-08-28; update in
+Working notes for `bitcoin-block-archive`. Written 2026-08-28; update in
 place rather than starting a new file.
 
 ## Why this exists
@@ -152,5 +152,5 @@ building a consumer on top of it.
 
 ## Repo state
 
-Everything in `BitcoinCoreWithS3/` is untracked — nothing committed.
+Everything in `bitcoin-block-archive/` is untracked — nothing committed.
 `coinjoin-pipeline` was read but never modified; its tree is clean.

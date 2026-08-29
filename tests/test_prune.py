@@ -4,16 +4,17 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from bitcoin_s3_archive import prune as prune_module
-from bitcoin_s3_archive.archive import archive
-from bitcoin_s3_archive.blockfile import block_hash
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.prune import (
+from bitcoin_block_archive import archive as archive_module
+from bitcoin_block_archive import prune as prune_module
+from bitcoin_block_archive.archive import archive
+from bitcoin_block_archive.blockfile import block_hash
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.prune import (
     prune_archived_blocks,
     safe_prune_height,
     unarchived_blocks,
 )
-from bitcoin_s3_archive.state import write_marker
+from bitcoin_block_archive.state import write_marker
 from tests.conftest import FakeClient, fake_header, write_block_file
 
 
@@ -44,6 +45,11 @@ def node(monkeypatch: pytest.MonkeyPatch) -> FakeNode:
 
     monkeypatch.setattr(
         prune_module,
+        "block_height",
+        lambda config, block: fake.heights[block],
+    )
+    monkeypatch.setattr(
+        archive_module,
         "block_height",
         lambda config, block: fake.heights[block],
     )

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.errors import ArchiveError
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.errors import ArchiveError
 
 __all__ = ["Config", "ArchiveError", "__version__"]
 

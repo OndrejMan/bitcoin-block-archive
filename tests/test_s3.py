@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_s3_archive import s3
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.errors import ArchiveError
+from bitcoin_block_archive import s3
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.errors import ArchiveError
 
 
 def test_base_command_carries_credentials(config: Config) -> None:

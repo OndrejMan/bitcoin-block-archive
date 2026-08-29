@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bitcoin_s3_archive.config import Config
+from bitcoin_block_archive.config import Config
 
 
 def test_remote_url_strips_trailing_slash(config: Config) -> None:

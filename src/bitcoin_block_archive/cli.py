@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bitcoin_s3_archive import __version__
-from bitcoin_s3_archive.archive import archive
-from bitcoin_s3_archive.bitcoin import stop_bitcoin
-from bitcoin_s3_archive.config import (
+from bitcoin_block_archive import __version__
+from bitcoin_block_archive.archive import archive
+from bitcoin_block_archive.bitcoin import stop_bitcoin
+from bitcoin_block_archive.config import (
     DEFAULT_BITCOIN_CLI,
     DEFAULT_BITCOIN_DATADIR,
     DEFAULT_BLOCK_DIR,
@@ -21,13 +21,13 @@ from bitcoin_s3_archive.config import (
     Config,
     default_credentials,
 )
-from bitcoin_s3_archive.disk import format_size, free_bytes, parse_size
-from bitcoin_s3_archive.logging_setup import LOG, configure
+from bitcoin_block_archive.disk import format_size, free_bytes, parse_size
+from bitcoin_block_archive.logging_setup import LOG, configure
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="bitcoin-s3-archive",
+        prog="bitcoin-block-archive",
         description=(
             "Archive completed Bitcoin Core blk*.dat files "
             "to S3 using s5cmd."

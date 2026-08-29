@@ -6,7 +6,7 @@ import re
 import shutil
 from pathlib import Path
 
-from bitcoin_s3_archive.errors import ArchiveError
+from bitcoin_block_archive.errors import ArchiveError
 
 SIZE_PATTERN = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([KMGTP]?)i?B?\s*$", re.I)
 SIZE_UNITS = "KMGTP"

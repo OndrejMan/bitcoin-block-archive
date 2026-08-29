@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 
-from bitcoin_s3_archive.logging_setup import LOG
+from bitcoin_block_archive.logging_setup import LOG
 
 
 def run(

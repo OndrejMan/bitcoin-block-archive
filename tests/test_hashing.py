@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from bitcoin_s3_archive.hashing import checksum_line, sha256_file
+from bitcoin_block_archive.hashing import checksum_line, sha256_file
 
 
 def test_sha256_file_matches_hashlib(tmp_path: Path) -> None:

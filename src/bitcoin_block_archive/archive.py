@@ -5,14 +5,17 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from bitcoin_s3_archive.config import Config
-from bitcoin_s3_archive.errors import ArchiveError
-from bitcoin_s3_archive.hashing import checksum_line, sha256_file
-from bitcoin_s3_archive.locking import exclusive_lock
-from bitcoin_s3_archive.logging_setup import LOG
-from bitcoin_s3_archive.prune import prune_archived_blocks
-from bitcoin_s3_archive.s3 import S5cmdClient, Uploader
-from bitcoin_s3_archive.state import already_archived, write_marker
+from bitcoin_block_archive.bitcoin import block_height
+from bitcoin_block_archive.blockfile import first_block_hash, last_block_hash
+from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.hashing import checksum_line, sha256_file
+from bitcoin_block_archive.locking import exclusive_lock
+from bitcoin_block_archive.logging_setup import LOG
+from bitcoin_block_archive.manifest import publish_manifest
+from bitcoin_block_archive.prune import prune_archived_blocks, safe_prune_height
+from bitcoin_block_archive.s3 import S5cmdClient, Uploader
+from bitcoin_block_archive.state import already_archived, write_marker
 
 BLOCK_FILE_GLOB = "blk*.dat"
 
@@ -109,11 +112,18 @@ def archive_block(
         remote_block,
     )
 
+    first_hash = first_block_hash(block_file)
+    last_hash = last_block_hash(block_file)
+    if first_hash is None or last_hash is None:
+        raise ArchiveError(f"{block_file} holds no complete Bitcoin block")
+
     write_marker(
         config,
         block_file,
         checksum,
         size,
+        first_block=(first_hash, block_height(config, first_hash)),
+        last_block=(last_hash, block_height(config, last_hash)),
     )
 
     LOG.info(
@@ -143,6 +153,14 @@ def archive(config: Config, client: Uploader | None = None) -> None:
 
             for block_file in blocks:
                 archive_block(config, uploader, block_file)
+
+        # Publish only after every selected file has a durable marker.  A
+        # failed manifest upload aborts before manual pruning can delete data.
+        publish_manifest(
+            config,
+            uploader,
+            archived_max_height=safe_prune_height(config),
+        )
 
         # Only reached when every selected block file is safely in S3.
         if config.prune_after_archive:

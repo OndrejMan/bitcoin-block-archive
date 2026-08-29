@@ -1,0 +1,60 @@
+# One persistent mainnet Bitcoin Core node plus an on-demand archive pass.
+# `archiver` shares only the read-only node datadir and speaks to bitcoind over
+# the private Compose network with Core's cookie authentication.
+services:
+  bitcoin-core:
+    image: bitcoin/bitcoin:29.1-alpine
+    environment:
+      BITCOIN_DATA: /bitcoin
+    command:
+      - -server=1
+      - -prune=1
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=172.16.0.0/12
+      - -printtoconsole
+    volumes:
+      - bitcoin-data:/bitcoin
+    healthcheck:
+      test: ["CMD-SHELL", "bitcoin-cli -datadir=/bitcoin getblockchaininfo >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    stop_grace_period: 5m
+
+  archiver:
+    profiles: ["archive"]
+    build: .
+    image: bitcoin-block-archive:local
+    # Docker creates a fresh named volume as root.  Run this short-lived job
+    # as root so it can create /state on first use; Core itself stays the
+    # unprivileged `bitcoin` user in its separate container.
+    user: "0:0"
+    depends_on:
+      bitcoin-core:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-https://s3.cl4.du.cesnet.cz}
+      S3_DESTINATION: ${S3_DESTINATION:-s3://xman-coinjoin/bitcoin-mainnet/blocks}
+      S3_PROFILE: ${S3_PROFILE:-coinjoin}
+      BITCOIN_DATADIR: /bitcoin
+      BITCOIN_RPC_HOST: bitcoin-core
+      BITCOIN_RPC_PORT: "8332"
+    volumes:
+      - bitcoin-data:/bitcoin:ro
+      - archive-state:/state
+    command:
+      - --block-dir
+      - /bitcoin/blocks
+      - --state-dir
+      - /state
+      - --keep-latest-files
+      - "2"
+      - --no-stop-on-error
+    restart: "no"
+
+volumes:
+  bitcoin-data:
+  archive-state:
