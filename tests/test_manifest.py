@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 
 from bitcoin_block_archive.config import Config
-from bitcoin_block_archive.manifest import MANIFEST_NAME, build_manifest, publish_manifest
+from bitcoin_block_archive.manifest import (
+    MANIFEST_NAME,
+    build_manifest,
+    publish_manifest,
+)
 from bitcoin_block_archive.state import write_marker
 from tests.conftest import FakeClient
 

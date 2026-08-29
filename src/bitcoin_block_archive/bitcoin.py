@@ -34,8 +34,7 @@ def _rpc_json(
 
     if result.returncode != 0:
         raise ArchiveError(
-            f"bitcoin-cli {' '.join(arguments)} failed: "
-            f"{result.stderr.strip()}"
+            f"bitcoin-cli {' '.join(arguments)} failed: {result.stderr.strip()}"
         )
 
     payload = json.loads(result.stdout)
@@ -83,9 +82,7 @@ def prune_blockchain(config: Config, height: int) -> int:
     result = cli(config, "pruneblockchain", str(height), check=False)
 
     if result.returncode != 0:
-        raise ArchiveError(
-            f"pruneblockchain {height} failed: {result.stderr.strip()}"
-        )
+        raise ArchiveError(f"pruneblockchain {height} failed: {result.stderr.strip()}")
 
     try:
         return int(result.stdout.strip())

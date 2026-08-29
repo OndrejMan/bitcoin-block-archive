@@ -74,9 +74,7 @@ def test_unarchived_blocks_ignores_marked_files(config: Config) -> None:
 
     write_marker(config, config.block_dir / "blk00000.dat", "x", 1)
 
-    assert [path.name for path in unarchived_blocks(config)] == [
-        "blk00001.dat"
-    ]
+    assert [path.name for path in unarchived_blocks(config)] == ["blk00001.dat"]
 
 
 def test_height_stays_below_every_unarchived_file(

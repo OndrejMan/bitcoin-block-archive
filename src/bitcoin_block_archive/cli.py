@@ -29,8 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bitcoin-block-archive",
         description=(
-            "Archive completed Bitcoin Core blk*.dat files "
-            "to S3 using s5cmd."
+            "Archive completed Bitcoin Core blk*.dat files to S3 using s5cmd."
         ),
     )
 

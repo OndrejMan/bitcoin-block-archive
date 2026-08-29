@@ -40,9 +40,7 @@ def _stat_size_and_mtime(block_file: Path, when: str) -> tuple[int, int]:
     try:
         stat = block_file.stat()
     except FileNotFoundError as error:
-        raise ArchiveError(
-            f"{block_file} disappeared {when}"
-        ) from error
+        raise ArchiveError(f"{block_file} disappeared {when}") from error
 
     return stat.st_size, stat.st_mtime_ns
 

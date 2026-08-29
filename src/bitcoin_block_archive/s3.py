@@ -49,6 +49,5 @@ class S5cmdClient:
 
         if result.returncode != 0:
             raise ArchiveError(
-                f"s5cmd upload failed for {source}: "
-                f"{result.stderr.strip()}"
+                f"s5cmd upload failed for {source}: {result.stderr.strip()}"
             )

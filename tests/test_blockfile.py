@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_block_archive.blockfile import block_hash, first_block_hash, last_block_hash
+from bitcoin_block_archive.blockfile import (
+    block_hash,
+    first_block_hash,
+    last_block_hash,
+)
 from bitcoin_block_archive.errors import ArchiveError
 from tests.conftest import fake_header, write_block_file
 
@@ -52,9 +56,7 @@ def test_truncated_block_is_rejected(tmp_path: Path) -> None:
     import struct
 
     target = tmp_path / "blk00000.dat"
-    target.write_bytes(
-        struct.pack("<4sI", b"\xfa\xbf\xb5\xda", 80) + b"x" * 40
-    )
+    target.write_bytes(struct.pack("<4sI", b"\xfa\xbf\xb5\xda", 80) + b"x" * 40)
 
     with pytest.raises(ArchiveError, match="truncated"):
         first_block_hash(target)

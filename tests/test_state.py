@@ -36,6 +36,4 @@ def test_write_marker_leaves_no_temporary_file(config: Config) -> None:
 
     write_marker(config, block_file, "cafe", 1)
 
-    assert [path.name for path in config.state_dir.iterdir()] == [
-        "blk00001.dat.json"
-    ]
+    assert [path.name for path in config.state_dir.iterdir()] == ["blk00001.dat.json"]

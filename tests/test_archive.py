@@ -85,7 +85,10 @@ def test_archive_is_idempotent(config: Config, client: FakeClient) -> None:
     archive(config, client)
 
     assert client.uploads[:-1] == uploads_after_first
-    assert client.uploads[-1] == ("archive-manifest.json", "s3://bucket/prefix/archive-manifest.json")
+    assert client.uploads[-1] == (
+        "archive-manifest.json",
+        "s3://bucket/prefix/archive-manifest.json",
+    )
 
 
 def test_no_marker_when_upload_fails(config: Config) -> None:
