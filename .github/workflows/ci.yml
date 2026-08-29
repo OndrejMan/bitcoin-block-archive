@@ -7,6 +7,15 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Where to run the manually triggered workflow"
+        required: true
+        default: github-hosted
+        type: choice
+        options:
+          - github-hosted
+          - self-hosted
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -18,7 +27,10 @@ permissions:
 jobs:
   quality:
     name: Tests and static analysis
-    runs-on: ubuntu-latest
+    # Pull requests always use an ephemeral GitHub-hosted runner. A manually
+    # triggered run may instead target a trusted local runner registered with
+    # the standard self-hosted, linux, and x64 labels.
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && fromJSON('["self-hosted", "linux", "x64"]') || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +61,7 @@ jobs:
   validate-image:
     name: Validate container image
     needs: quality
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && fromJSON('["self-hosted", "linux", "x64"]') || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +79,7 @@ jobs:
     name: Publish multi-architecture image
     needs: quality
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner == 'self-hosted' && fromJSON('["self-hosted", "linux", "x64"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
