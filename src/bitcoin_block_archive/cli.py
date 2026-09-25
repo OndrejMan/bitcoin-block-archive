@@ -13,6 +13,7 @@ from bitcoin_block_archive.config import (
     DEFAULT_BITCOIN_DATADIR,
     DEFAULT_BLOCK_DIR,
     DEFAULT_KEEP_LATEST_FILES,
+    DEFAULT_MIN_FREE_SPACE,
     DEFAULT_RPC_TIMEOUT,
     DEFAULT_S3_DESTINATION,
     DEFAULT_S3_ENDPOINT,
@@ -23,6 +24,8 @@ from bitcoin_block_archive.config import (
     Config,
     default_credentials,
 )
+from bitcoin_block_archive.disk import format_size, free_bytes, parse_size
+from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.logging_setup import LOG, configure
 
 
@@ -39,6 +42,7 @@ class Arguments(argparse.Namespace):
     bitcoin_cli: str
     bitcoin_datadir: Path
     prune_after_archive: bool
+    min_free_space: int
     no_stop_on_error: bool
     verbose: bool
     rpc_timeout: int
@@ -58,6 +62,13 @@ def _positive_int(text: str) -> int:
     if value <= 0:
         raise argparse.ArgumentTypeError("must be positive")
     return value
+
+
+def _size_argument(text: str) -> int:
+    try:
+        return parse_size(text)
+    except (ArchiveError, OverflowError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -139,11 +150,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--min-free-space",
+        type=_size_argument,
+        default=DEFAULT_MIN_FREE_SPACE,
+        metavar="SIZE",
+        help=(
+            "Stop Bitcoin Core when free space in the block directory falls "
+            "below SIZE (e.g. 20G). 0 disables the watchdog."
+        ),
+    )
+
+    parser.add_argument(
         "--no-stop-on-error",
         action="store_true",
         help=(
             "Never stop Bitcoin Core, whatever happens. By default it is "
-            "stopped when archival fails under automatic pruning."
+            "stopped when archival fails under automatic pruning, or when "
+            "--min-free-space is breached."
         ),
     )
 
@@ -184,7 +207,7 @@ def config_from_args(args: Arguments) -> Config:
         keep_latest_files=args.keep_latest_files,
         stop_bitcoin_on_error=not args.no_stop_on_error,
         prune_after_archive=args.prune_after_archive,
-        min_free_space=0,
+        min_free_space=args.min_free_space,
         bitcoin_cli=args.bitcoin_cli,
         bitcoin_datadir=args.bitcoin_datadir,
         rpc_timeout=args.rpc_timeout,
@@ -193,10 +216,32 @@ def config_from_args(args: Arguments) -> Config:
     )
 
 
+def _space_is_critical(config: Config) -> bool:
+    if config.min_free_space <= 0 or not config.block_dir.is_dir():
+        return False
+
+    free = free_bytes(config.block_dir)
+
+    if free >= config.min_free_space:
+        return False
+
+    LOG.critical(
+        "Only %s free in %s, below the %s threshold",
+        format_size(free),
+        config.block_dir,
+        format_size(config.min_free_space),
+    )
+
+    return True
+
+
 def should_stop_bitcoin(config: Config, *, failed: bool) -> bool:
     """Decide whether the node has to be stopped to protect unarchived data."""
     if not config.stop_bitcoin_on_error:
         return False
+
+    if _space_is_critical(config):
+        return True
 
     if not failed:
         return False
