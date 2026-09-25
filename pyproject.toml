@@ -17,6 +17,9 @@ test = ["pytest>=8,<9"]
 [dependency-groups]
 dev = ["ruff>=0.6", "mypy>=1.11"]
 
+[project.scripts]
+bitcoin-block-archive = "bitcoin_block_archive.cli:main"
+
 [tool.setuptools]
 packages = ["bitcoin_block_archive"]
 package-dir = {bitcoin_block_archive = "src/bitcoin_block_archive"}
