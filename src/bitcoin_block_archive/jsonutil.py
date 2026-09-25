@@ -18,6 +18,15 @@ def require_object(value: object, context: str) -> dict[str, object]:
     return result
 
 
+def require_list(value: object, context: str) -> list[object]:
+    if not isinstance(value, list):
+        raise ArchiveError(f"{context} must contain a list")
+    result: list[object] = []
+    for item in value:
+        result.append(item)
+    return result
+
+
 def load_object(text: str, context: str) -> dict[str, object]:
     payload: object
     try:
