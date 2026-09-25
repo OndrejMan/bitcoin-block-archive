@@ -35,6 +35,10 @@ RUN python3 -m venv /opt/bitcoin-block-archive-venv \
     && /opt/bitcoin-block-archive-venv/bin/pip install --no-cache-dir --no-deps . \
     && chmod 0755 /usr/local/bin/bitcoin-block-archive-entrypoint
 
+# A fresh `archive-state` volume copies this mode, so whichever UID runs the
+# archiver can create its state there.
+RUN mkdir -m 1777 /state
+
 ENV PATH="/opt/bitcoin-block-archive-venv/bin:${PATH}"
 
 USER bitcoin
