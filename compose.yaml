@@ -6,6 +6,11 @@ services:
     image: bitcoin/bitcoin:29.1-alpine
     environment:
       BITCOIN_DATA: /bitcoin
+      # The image applies these IDs when it owns the datadir. Keeping the
+      # default at 0 preserves its original internal bitcoin:bitcoin IDs.
+      # Set them to the host owner's IDs for a bind-mounted host disk.
+      UID: ${BITCOIN_DATA_UID:-0}
+      GID: ${BITCOIN_DATA_GID:-0}
     command:
       - -server=1
       - -prune=1
@@ -14,7 +19,9 @@ services:
       - -rpcallowip=172.16.0.0/12
       - -printtoconsole
     volumes:
-      - bitcoin-data:/bitcoin
+      # Defaults to Docker's named `bitcoin-data` volume. Set
+      # BITCOIN_DATA_SOURCE=/mnt/bitcoin-data to use a mounted host disk.
+      - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin
     healthcheck:
       test: ["CMD-SHELL", "bitcoin-cli -datadir=/bitcoin getblockchaininfo >/dev/null"]
       interval: 30s
@@ -44,7 +51,7 @@ services:
       BITCOIN_RPC_HOST: bitcoin-core
       BITCOIN_RPC_PORT: "8332"
     volumes:
-      - bitcoin-data:/bitcoin:ro
+      - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
       - archive-state:/state
     command:
       - --block-dir
