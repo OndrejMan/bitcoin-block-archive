@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from bitcoin_block_archive.bitcoin import block_height
+from bitcoin_block_archive.bitcoin import block_height, require_manual_pruning
 from bitcoin_block_archive.blockfile import (
     first_block_hash,
     last_block_hash,
@@ -17,6 +17,7 @@ from bitcoin_block_archive.hashing import checksum_line, sha256_file
 from bitcoin_block_archive.locking import exclusive_lock
 from bitcoin_block_archive.logging_setup import LOG
 from bitcoin_block_archive.models import BlockReference, FileSignature
+from bitcoin_block_archive.prune import prune_archived_blocks
 from bitcoin_block_archive.s3 import S5cmdClient, Uploader
 from bitcoin_block_archive.state import already_archived, file_signature, write_marker
 
@@ -152,6 +153,8 @@ def archive(config: Config, client: Uploader | None = None) -> None:
             return
 
         validate_block_directory(config.block_dir)
+        if config.prune_after_archive:
+            require_manual_pruning(config)
 
         blocks = find_archivable_blocks(config)
 
@@ -162,3 +165,7 @@ def archive(config: Config, client: Uploader | None = None) -> None:
 
             for block_file in blocks:
                 archive_block(config, uploader, block_file)
+
+        # Only reached when every selected block file is safely in S3.
+        if config.prune_after_archive:
+            prune_archived_blocks(config, uploader)

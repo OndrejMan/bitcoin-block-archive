@@ -164,3 +164,12 @@ def write_marker(
     )
 
     temporary.replace(marker)
+
+
+def unarchived_blocks(config: Config) -> list[Path]:
+    """Block files present on disk that carry no completed marker."""
+    return [
+        path
+        for path in sorted(config.block_dir.glob("blk*.dat"))
+        if not already_archived(config, path)
+    ]
