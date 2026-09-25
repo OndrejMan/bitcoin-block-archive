@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from bitcoin_block_archive import cli
+from bitcoin_block_archive import bitcoin, cli
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
 
@@ -66,6 +67,13 @@ def test_main_leaves_bitcoin_running_when_opted_out(
     assert cli.main(["--no-stop-on-error"]) == 1
 
 
+def test_min_free_space_accepts_human_sizes() -> None:
+    args = cli.Arguments()
+    cli.build_parser().parse_args(["--min-free-space", "20G"], namespace=args)
+
+    assert cli.config_from_args(args).min_free_space == 20 * 1024**3
+
+
 def test_manual_pruning_keeps_the_node_running_after_a_failure(
     config: Config,
     monkeypatch: pytest.MonkeyPatch,
@@ -102,10 +110,37 @@ def test_upload_only_failure_on_manual_node_does_not_stop_it(
     assert not cli.should_stop_bitcoin(config, failed=True)
 
 
+def test_low_disk_stops_the_node_even_on_success(config: Config) -> None:
+    guarded = replace(
+        config,
+        prune_after_archive=True,
+        min_free_space=1024**5,
+    )
+
+    assert cli.should_stop_bitcoin(guarded, failed=False)
+
+
+def test_ample_disk_does_not_stop_the_node(config: Config) -> None:
+    guarded = replace(config, min_free_space=1)
+
+    assert not cli.should_stop_bitcoin(guarded, failed=False)
+
+
+def test_no_stop_on_error_overrides_everything(config: Config) -> None:
+    never = replace(
+        config,
+        stop_bitcoin_on_error=False,
+        min_free_space=1024**5,
+    )
+
+    assert not cli.should_stop_bitcoin(never, failed=True)
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
         ["--keep-latest-files", "-1"],
+        ["--min-free-space", "nonsense"],
         ["--rpc-timeout", "0"],
         ["--upload-timeout", "-1"],
         ["--verify-timeout", "invalid"],
@@ -152,3 +187,18 @@ def test_node_control_failure_returns_unsuccessful_exit(
     monkeypatch.setattr(cli, "should_stop_bitcoin", lambda *args, **kwargs: True)
     monkeypatch.setattr(cli, "stop_bitcoin", failed_stop)
     assert cli.main([]) == 1
+
+
+def test_failed_low_disk_stop_does_not_report_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def failed_rpc(
+        command: list[str], *, check: bool = True, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[-1] == "stop"
+        return subprocess.CompletedProcess(command, 1, "", "RPC unavailable")
+
+    monkeypatch.setattr(cli, "archive", lambda _: None)
+    monkeypatch.setattr(cli, "free_bytes", lambda _: 0)
+    monkeypatch.setattr(bitcoin, "run", failed_rpc)
+    assert cli.main(["--block-dir", str(tmp_path), "--min-free-space", "1"]) == 1
