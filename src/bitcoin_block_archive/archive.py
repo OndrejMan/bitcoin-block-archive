@@ -12,6 +12,7 @@ from bitcoin_block_archive.blockfile import (
     validate_block_directory,
 )
 from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.coverage import archived_height
 from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.hashing import checksum_line, sha256_file
 from bitcoin_block_archive.locking import exclusive_lock
@@ -172,6 +173,7 @@ def archive(config: Config, client: Uploader | None = None) -> None:
         publish_manifest(
             config,
             uploader,
+            archived_max_height=archived_height(config),
         )
 
         # Only reached when every selected block file is safely in S3.

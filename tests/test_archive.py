@@ -35,6 +35,7 @@ def archive_block_heights(monkeypatch: pytest.MonkeyPatch) -> None:
         "block_height",
         lambda _config, block: int(block[:2], 16),
     )
+    monkeypatch.setattr(archive_module, "archived_height", lambda _config: 100)
 
 
 def test_keeps_newest_files_back(config: Config) -> None:

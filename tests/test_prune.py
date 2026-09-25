@@ -5,12 +5,15 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 from bitcoin_block_archive import archive as archive_module
+from bitcoin_block_archive import coverage as coverage_module
 from bitcoin_block_archive import prune as prune_module
 from bitcoin_block_archive.archive import archive
 from bitcoin_block_archive.blockfile import block_hash
 from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.coverage import archived_height
 from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.hashing import sha256_file
+from bitcoin_block_archive.models import BlockReference
 from bitcoin_block_archive.prune import (
     prune_archived_blocks,
     safe_prune_height,
@@ -67,6 +70,10 @@ def node(monkeypatch: pytest.MonkeyPatch) -> FakeNode:
         "block_height",
         lambda config, block: fake.heights[block],
     )
+    monkeypatch.setattr(
+        coverage_module, "block_height", lambda config, block: fake.heights[block]
+    )
+    monkeypatch.setattr(coverage_module, "chain_height", lambda config: fake.tip)
     monkeypatch.setattr(
         prune_module,
         "chain_height",
@@ -206,6 +213,118 @@ def test_archived_file_still_on_disk_does_not_raise_the_height(
     mark_first_file(config)
 
     assert safe_prune_height(config) == 299
+
+
+def test_coverage_checks_later_out_of_order_blocks(
+    config: Config, node: FakeNode
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 0, "blk00001.dat": 100})
+    mark_first_file(config)
+    write_block_file(
+        config.block_dir / "blk00001.dat", [fake_header(100), fake_header(10)]
+    )
+    node.heights[block_hash(fake_header(10))] = 10
+    assert safe_prune_height(config) == 99
+    assert archived_height(config) == 9
+
+
+def test_fully_archived_coverage_does_not_follow_live_tip(
+    config: Config,
+    node: FakeNode,
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 100})
+    path = config.block_dir / "blk00000.dat"
+    write_marker(
+        config,
+        path,
+        sha256_file(path),
+        path.stat().st_size,
+        last_block=BlockReference(block_hash(fake_header(100)), 100),
+        source_signature=file_signature(path),
+    )
+    assert archived_height(config) == 100
+
+
+def test_linked_pending_headers_share_one_height_lookup(
+    config: Config,
+    node: FakeNode,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 0})
+    mark_first_file(config)
+    first = fake_header(100)
+    second = fake_header(101)
+    second = second[:4] + bytes.fromhex(block_hash(first))[::-1] + second[36:]
+    write_block_file(config.block_dir / "blk00001.dat", [first, second])
+    calls: list[str] = []
+
+    def height(_: Config, digest: str) -> int:
+        calls.append(digest)
+        assert digest == block_hash(first)
+        return 100
+
+    monkeypatch.setattr(coverage_module, "block_height", height)
+    assert archived_height(config) == 99
+    assert calls == [block_hash(first)]
+
+
+def test_changes_during_coverage_check_abort_publication(
+    config: Config,
+    node: FakeNode,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 0, "blk00001.dat": 100})
+    mark_first_file(config)
+
+    def height(_: Config, digest: str) -> int:
+        write_block_file(config.block_dir / "blk00001.dat", [fake_header(101)])
+        return 100
+
+    monkeypatch.setattr(coverage_module, "block_height", height)
+    with pytest.raises(ArchiveError, match="changed"):
+        archived_height(config)
+
+
+def test_missing_middle_file_prevents_coverage(config: Config, node: FakeNode) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 0, "blk00002.dat": 100})
+    mark_first_file(config)
+    assert archived_height(config) is None
+
+
+@pytest.mark.parametrize("during_tip_lookup", [False, True])
+def test_new_block_file_aborts_coverage_snapshot(
+    config: Config,
+    node: FakeNode,
+    monkeypatch: pytest.MonkeyPatch,
+    during_tip_lookup: bool,
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 0, "blk00001.dat": 100})
+    mark_first_file(config)
+
+    def add_file() -> None:
+        write_block_file(config.block_dir / "blk00002.dat", [fake_header(10)])
+        node.heights[block_hash(fake_header(10))] = 10
+
+    def tip(_: Config) -> int:
+        if during_tip_lookup:
+            add_file()
+        return node.tip
+
+    def height(_: Config, digest: str) -> int:
+        if not during_tip_lookup:
+            add_file()
+        return node.heights[digest]
+
+    monkeypatch.setattr(coverage_module, "chain_height", tip)
+    monkeypatch.setattr(coverage_module, "block_height", height)
+    with pytest.raises(ArchiveError, match="changed"):
+        archived_height(config)
 
 
 def test_missing_remote_copy_blocks_pruning(config: Config, node: FakeNode) -> None:
