@@ -6,6 +6,8 @@ import pytest
 
 from bitcoin_block_archive.config import Config
 
+PREALLOCATED_BLOCK_FILE_SIZE = 4096
+
 
 @pytest.fixture
 def config(tmp_path: Path) -> Config:
@@ -26,3 +28,20 @@ def config(tmp_path: Path) -> Config:
         bitcoin_cli="bitcoin-cli",
         bitcoin_datadir=tmp_path / "datadir",
     )
+
+
+def write_block_file(path: Path, headers: list[bytes]) -> None:
+    """Write a blk*.dat container holding `headers` as 80-byte blocks."""
+    import struct
+
+    payload = b"".join(
+        struct.pack("<4sI", b"\xfa\xbf\xb5\xda", len(header)) + header
+        for header in headers
+    )
+
+    # Bitcoin Core preallocates block files, so pad with zeroes.
+    path.write_bytes(payload + b"\x00" * 64)
+
+
+def fake_header(seed: int) -> bytes:
+    return bytes([seed % 256]) * 80
