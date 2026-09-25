@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.models import ArchiveSidecarJSON
 
 PREALLOCATED_BLOCK_FILE_SIZE = 4096
 
@@ -28,6 +29,33 @@ def config(tmp_path: Path) -> Config:
         bitcoin_cli="bitcoin-cli",
         bitcoin_datadir=tmp_path / "datadir",
     )
+
+
+class FakeClient:
+    """S5cmdClient stand-in recording uploads instead of running s5cmd."""
+
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.uploads: list[tuple[str, str]] = []
+        self.fail_on = fail_on
+
+    def upload(self, source: Path, destination: str) -> None:
+        if self.fail_on is not None and self.fail_on in destination:
+            raise RuntimeError(f"upload refused: {destination}")
+
+        self.uploads.append((source.name, destination))
+
+    def verify(
+        self,
+        destination: str,
+        sidecar: ArchiveSidecarJSON,
+    ) -> None:
+        if self.fail_on is not None and self.fail_on in destination:
+            raise RuntimeError(f"verification refused: {destination}")
+
+
+@pytest.fixture
+def client() -> FakeClient:
+    return FakeClient()
 
 
 def write_block_file(path: Path, headers: list[bytes]) -> None:
