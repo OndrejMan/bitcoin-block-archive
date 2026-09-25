@@ -70,6 +70,7 @@ def test_archive_uploads_block_and_checksum(
     assert client.uploads == [
         ("blk00000.dat", "s3://bucket/prefix/blk00000.dat"),
         (client.uploads[1][0], "s3://bucket/prefix/blk00000.dat.sha256"),
+        ("archive-manifest.json", "s3://bucket/prefix/archive-manifest.json"),
     ]
     assert already_archived(config, config.block_dir / "blk00000.dat")
 
@@ -82,7 +83,11 @@ def test_archive_is_idempotent(config: Config, client: FakeClient) -> None:
 
     archive(config, client)
 
-    assert client.uploads == uploads_after_first
+    assert client.uploads[:-1] == uploads_after_first
+    assert client.uploads[-1] == (
+        "archive-manifest.json",
+        "s3://bucket/prefix/archive-manifest.json",
+    )
 
 
 def test_no_marker_when_upload_fails(config: Config) -> None:

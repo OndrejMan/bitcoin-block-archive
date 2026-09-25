@@ -59,6 +59,18 @@ class ArchiveMarker:
     first_block: BlockReference | None = None
     last_block: BlockReference | None = None
 
+    def entry_json(self) -> ArchiveEntryJSON:
+        entry: ArchiveEntryJSON = {
+            "file": self.file,
+            "size": self.size,
+            "sha256": self.sha256,
+        }
+        if self.first_block is not None:
+            entry["first_block"] = self.first_block.to_json()
+        if self.last_block is not None:
+            entry["last_block"] = self.last_block.to_json()
+        return entry
+
     def to_json(self) -> ArchiveMarkerJSON:
         payload: ArchiveMarkerJSON = {
             "file": self.file,
@@ -74,3 +86,11 @@ class ArchiveMarker:
         if self.last_block is not None:
             payload["last_block"] = self.last_block.to_json()
         return payload
+
+
+class ArchiveManifestJSON(TypedDict):
+    schema_version: int
+    destination: str
+    contiguous_from_zero: bool
+    archived_max_height: int | None
+    block_files: list[ArchiveEntryJSON]

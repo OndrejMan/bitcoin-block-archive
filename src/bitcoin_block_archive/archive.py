@@ -16,6 +16,7 @@ from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.hashing import checksum_line, sha256_file
 from bitcoin_block_archive.locking import exclusive_lock
 from bitcoin_block_archive.logging_setup import LOG
+from bitcoin_block_archive.manifest import publish_manifest
 from bitcoin_block_archive.models import BlockReference, FileSignature
 from bitcoin_block_archive.prune import prune_archived_blocks
 from bitcoin_block_archive.s3 import S5cmdClient, Uploader
@@ -165,6 +166,13 @@ def archive(config: Config, client: Uploader | None = None) -> None:
 
             for block_file in blocks:
                 archive_block(config, uploader, block_file)
+
+        # Publish only after every selected file has a durable marker.  A
+        # failed manifest upload aborts before manual pruning can delete data.
+        publish_manifest(
+            config,
+            uploader,
+        )
 
         # Only reached when every selected block file is safely in S3.
         if config.prune_after_archive:

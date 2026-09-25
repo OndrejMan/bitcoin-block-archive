@@ -240,3 +240,20 @@ def test_manual_pruning_is_checked_before_upload(
         archive(replace(config, prune_after_archive=True), client)
     assert client.uploads == []
     assert node.pruned == []
+
+
+def test_failed_manifest_upload_blocks_pruning(config: Config, node: FakeNode) -> None:
+    node.heights = make_chain(
+        config,
+        {
+            "blk00000.dat": 0,
+            "blk00001.dat": 100,
+            "blk00002.dat": 200,
+        },
+    )
+    with pytest.raises(RuntimeError, match="upload refused"):
+        archive(
+            replace(config, prune_after_archive=True),
+            FakeClient(fail_on="archive-manifest.json"),
+        )
+    assert node.pruned == []

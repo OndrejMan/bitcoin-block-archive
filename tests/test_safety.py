@@ -11,6 +11,8 @@ from bitcoin_block_archive.archive import archive, archive_block
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.hashing import sha256_file
+from bitcoin_block_archive.manifest import build_manifest
+from bitcoin_block_archive.models import BlockReference
 from bitcoin_block_archive.state import (
     already_archived,
     file_signature,
@@ -52,6 +54,16 @@ def test_markers_cannot_be_reused_for_another_destination(
     )
     with pytest.raises(ArchiveError, match="destination|endpoint"):
         already_archived(changed, block)
+
+
+def test_manifest_rejects_foreign_markers_even_after_local_pruning(
+    config: Config,
+    block: Path,
+) -> None:
+    mark(config, block)
+    block.unlink()
+    with pytest.raises(ArchiveError, match="destination"):
+        build_manifest(replace(config, s3_destination="s3://other/blocks"))
 
 
 def test_modified_file_is_no_longer_archived(config: Config, block: Path) -> None:
@@ -118,6 +130,28 @@ def test_missing_block_directory_does_not_publish_an_empty_archive(
     with pytest.raises(ArchiveError, match="directory"):
         archive(replace(config, block_dir=config.block_dir / "missing"), client)
     assert client.uploads == []
+
+
+def test_unknown_coverage_is_not_replaced_with_last_block_height(
+    config: Config,
+    block: Path,
+) -> None:
+    write_marker(
+        config,
+        block,
+        sha256_file(block),
+        block.stat().st_size,
+        last_block=BlockReference("a" * 64, 999),
+        source_signature=file_signature(block),
+    )
+    manifest = build_manifest(config, archived_max_height=None)
+    assert manifest["archived_max_height"] is None
+
+
+def test_empty_manifest_does_not_claim_chain_coverage(config: Config) -> None:
+    manifest = build_manifest(config, archived_max_height=100)
+    assert manifest["contiguous_from_zero"] is False
+    assert manifest["archived_max_height"] is None
 
 
 def test_marker_without_endpoint_is_rejected(
