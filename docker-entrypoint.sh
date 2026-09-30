@@ -8,12 +8,18 @@ set -eu
 # ~/.aws into the image.
 access_key="${S3_ACCESS_KEY_ID:-}"
 secret_key="${S3_SECRET_ACCESS_KEY:-}"
+credentials_names="S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY"
+if [ -z "${access_key}" ] && [ -z "${secret_key}" ]; then
+    access_key="${AWS_ACCESS_KEY_ID:-}"
+    secret_key="${AWS_SECRET_ACCESS_KEY:-}"
+    credentials_names="AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+fi
 profile="${S3_PROFILE:-coinjoin}"
 credentials_file="${S3_CREDENTIALS_FILE:-/tmp/bitcoin-block-archive-credentials}"
 
 if [ -n "${access_key}" ] || [ -n "${secret_key}" ]; then
     if [ -z "${access_key}" ] || [ -z "${secret_key}" ]; then
-        echo "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be set together" >&2
+        echo "${credentials_names} must be set together" >&2
         exit 2
     fi
     umask 077

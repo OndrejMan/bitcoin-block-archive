@@ -12,6 +12,8 @@ ENTRYPOINT = Path(__file__).resolve().parent.parent / "docker-entrypoint.sh"
 CREDENTIAL_VARIABLES = (
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
     "S3_PROFILE",
 )
 
@@ -62,8 +64,9 @@ def test_without_secrets_arguments_pass_through(
     assert not (tmp_path / "credentials").exists()
 
 
+@pytest.mark.parametrize("prefix", ["S3", "AWS"])
 def test_secrets_become_a_private_credentials_profile(
-    fake_archiver: Path, tmp_path: Path
+    fake_archiver: Path, tmp_path: Path, prefix: str
 ) -> None:
     credentials = tmp_path / "credentials"
     result = run_entrypoint(
@@ -71,9 +74,11 @@ def test_secrets_become_a_private_credentials_profile(
         tmp_path,
         "--state-dir",
         "/state",
-        S3_ACCESS_KEY_ID="access",
-        S3_SECRET_ACCESS_KEY="secret",
-        S3_PROFILE="archive",
+        **{
+            f"{prefix}_ACCESS_KEY_ID": "access",
+            f"{prefix}_SECRET_ACCESS_KEY": "secret",
+            "S3_PROFILE": "archive",
+        },
     )
 
     assert result.returncode == 0
@@ -89,6 +94,22 @@ def test_secrets_become_a_private_credentials_profile(
         "[archive]\naws_access_key_id = access\naws_secret_access_key = secret\n"
     )
     assert stat.S_IMODE(credentials.stat().st_mode) == 0o600
+
+
+def test_s3_pair_takes_precedence_over_aws_pair(
+    fake_archiver: Path, tmp_path: Path
+) -> None:
+    result = run_entrypoint(
+        fake_archiver,
+        tmp_path,
+        S3_ACCESS_KEY_ID="s3-access",
+        S3_SECRET_ACCESS_KEY="s3-secret",
+        AWS_ACCESS_KEY_ID="aws-access",
+        AWS_SECRET_ACCESS_KEY="aws-secret",
+    )
+
+    assert result.returncode == 0
+    assert "s3-access" in (tmp_path / "credentials").read_text()
 
 
 def test_half_a_key_pair_is_rejected(fake_archiver: Path, tmp_path: Path) -> None:
