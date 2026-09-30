@@ -16,6 +16,7 @@ services:
       - -prune=1
       - -dbcache=${BITCOIN_DBCACHE:-4096}
       - -blocksxor=0
+      - -listen=0
       - -rpcbind=0.0.0.0
       - -rpcallowip=172.16.0.0/12
       - -printtoconsole
