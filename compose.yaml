@@ -56,14 +56,11 @@ services:
     volumes:
       - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
       - archive-state:/state
-    command:
-      - --block-dir
-      - /bitcoin/blocks
-      - --state-dir
-      - /state
-      - --keep-latest-files
-      - "2"
-      - --no-stop-on-error
+    # ARCHIVER_ARGS replaces the default flags after the fixed paths and is
+    # split like a shell command line.
+    command: >-
+      --block-dir /bitcoin/blocks --state-dir /state
+      ${ARCHIVER_ARGS:---keep-latest-files 2 --no-stop-on-error}
     restart: "no"
 
 volumes:
