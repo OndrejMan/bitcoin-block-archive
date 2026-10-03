@@ -31,6 +31,12 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def one_tebibyte_free(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the default 20 GiB watchdog independent of the test host's disk."""
+    monkeypatch.setattr(cli, "free_bytes", lambda _: 1024**4)
+
+
 def parse(argv: list[str]) -> Config:
     args = cli.Arguments()
     cli.build_parser().parse_args(argv, namespace=args)
@@ -45,6 +51,7 @@ def test_defaults_map_into_config() -> None:
     assert config.block_dir == Path("/var/lib/bitcoin/blocks")
     assert config.keep_latest_files == 2
     assert config.stop_bitcoin_on_error is True
+    assert config.min_free_space == 20 * 1024**3
 
 
 def test_no_stop_on_error_flag() -> None:
@@ -205,14 +212,24 @@ def test_ample_disk_does_not_stop_the_node(config: Config) -> None:
     assert not cli.should_stop_bitcoin(guarded, failed=False)
 
 
-def test_no_stop_on_error_overrides_everything(config: Config) -> None:
-    never = replace(
+def test_low_disk_stops_the_node_despite_no_stop_on_error(config: Config) -> None:
+    opted_out = replace(
         config,
         stop_bitcoin_on_error=False,
         min_free_space=1024**5,
     )
 
-    assert not cli.should_stop_bitcoin(never, failed=True)
+    assert cli.should_stop_bitcoin(opted_out, failed=False)
+
+
+def test_no_stop_on_error_keeps_the_node_running_after_a_failure(
+    config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: False)
+    opted_out = replace(config, stop_bitcoin_on_error=False)
+
+    assert not cli.should_stop_bitcoin(opted_out, failed=True)
 
 
 @pytest.mark.parametrize(

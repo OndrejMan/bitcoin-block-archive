@@ -198,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SIZE",
         help=(
             "Stop Bitcoin Core when free space in the block directory falls "
-            "below SIZE (e.g. 20G). 0 disables the watchdog."
+            "below SIZE (default: 20G). 0 disables the watchdog."
         ),
     )
 
@@ -206,9 +206,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-stop-on-error",
         action="store_true",
         help=(
-            "Never stop Bitcoin Core, whatever happens. By default it is "
-            "stopped when archival fails under automatic pruning, or when "
-            "--min-free-space is breached."
+            "Do not stop Bitcoin Core after a failed pass. By default it is "
+            "stopped when archival fails under automatic pruning or an "
+            "unverifiable pruning mode. --min-free-space still applies."
         ),
     )
 
@@ -292,11 +292,11 @@ def _space_is_critical(config: Config) -> bool:
 
 def should_stop_bitcoin(config: Config, *, failed: bool) -> bool:
     """Decide whether the node has to be stopped to protect unarchived data."""
-    if not config.stop_bitcoin_on_error:
-        return False
-
     if _space_is_critical(config):
         return True
+
+    if not config.stop_bitcoin_on_error:
+        return False
 
     if not failed:
         return False

@@ -15,7 +15,7 @@ DEFAULT_S3_PROFILE = "coinjoin"
 DEFAULT_S3_DESTINATION = "s3://xman-coinjoin/bitcoin-mainnet/blocks"
 
 DEFAULT_KEEP_LATEST_FILES = 2
-DEFAULT_MIN_FREE_SPACE = 0  # bytes; 0 disables the watchdog
+DEFAULT_MIN_FREE_SPACE = 20 * 1024**3  # bytes; 0 disables the watchdog
 DEFAULT_RPC_TIMEOUT = 60
 DEFAULT_UPLOAD_TIMEOUT = 3600
 DEFAULT_VERIFY_TIMEOUT = 60
