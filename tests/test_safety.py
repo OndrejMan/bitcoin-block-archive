@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from bitcoin_block_archive import archive as archive_module
+from bitcoin_block_archive import bitcoin
 from bitcoin_block_archive.archive import archive, archive_block
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
@@ -146,6 +148,29 @@ def test_mutation_during_height_lookup_aborts_before_upload(
     client = FakeClient()
     with pytest.raises(ArchiveError, match="changed"):
         archive_block(config, client, block)
+    assert client.uploads == []
+    assert not marker_path(config, block).exists()
+
+
+def test_automatic_pruning_is_rejected_before_any_upload(
+    config: Config,
+    block: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def automatic_pruning(
+        command: list[str], *, check: bool = True, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        assert command[-1] == "getblockchaininfo"
+        info = {"pruned": True, "automatic_pruning": True}
+        return subprocess.CompletedProcess(command, 0, json.dumps(info), "")
+
+    monkeypatch.setattr(
+        archive_module, "require_safe_pruning", bitcoin.require_safe_pruning
+    )
+    monkeypatch.setattr(bitcoin, "run", automatic_pruning)
+    client = FakeClient()
+    with pytest.raises(ArchiveError, match="must not prune automatically"):
+        archive(replace(config, keep_latest_files=0), client)
     assert client.uploads == []
     assert not marker_path(config, block).exists()
 

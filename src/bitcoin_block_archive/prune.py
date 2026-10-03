@@ -12,7 +12,7 @@ from bitcoin_block_archive.bitcoin import (
     block_height,
     chain_height,
     prune_blockchain,
-    require_manual_pruning,
+    require_safe_pruning,
 )
 from bitcoin_block_archive.blockfile import first_block_hash
 from bitcoin_block_archive.config import Config
@@ -80,7 +80,7 @@ def _verify_archived_local_files(config: Config, uploader: Uploader) -> None:
 
 
 def prune_archived_blocks(config: Config, client: Uploader | None = None) -> None:
-    require_manual_pruning(config)
+    require_safe_pruning(config, archiver_prunes=True)
     uploader = client if client is not None else S5cmdClient(config)
     _verify_archived_local_files(config, uploader)
     height = safe_prune_height(config)

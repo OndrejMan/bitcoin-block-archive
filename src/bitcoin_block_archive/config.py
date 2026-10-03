@@ -38,7 +38,6 @@ class Config:
     s3_destination: str
 
     keep_latest_files: int
-    stop_bitcoin_on_error: bool
 
     prune_after_archive: bool
     min_free_space: int

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from bitcoin_block_archive import __version__
 from bitcoin_block_archive.archive import archive
-from bitcoin_block_archive.bitcoin import manual_pruning_enabled, stop_bitcoin
+from bitcoin_block_archive.bitcoin import stop_bitcoin
 from bitcoin_block_archive.config import (
     DEFAULT_BITCOIN_CLI,
     DEFAULT_BITCOIN_DATADIR,
@@ -26,7 +26,7 @@ from bitcoin_block_archive.config import (
     default_credentials,
 )
 from bitcoin_block_archive.disk import format_size, free_bytes, parse_size
-from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.logging_setup import LOG, configure
 from bitcoin_block_archive.schedule import (
     parse_duration,
@@ -51,7 +51,6 @@ class Arguments(argparse.Namespace):
     rpc_port: int | None
     prune_after_archive: bool
     min_free_space: int
-    no_stop_on_error: bool
     verbose: bool
     rpc_timeout: int
     upload_timeout: int
@@ -203,16 +202,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--no-stop-on-error",
-        action="store_true",
-        help=(
-            "Do not stop Bitcoin Core after a failed pass. By default it is "
-            "stopped when archival fails under automatic pruning or an "
-            "unverifiable pruning mode. --min-free-space still applies."
-        ),
-    )
-
-    parser.add_argument(
         "--interval",
         type=_duration_argument,
         default=_env("ARCHIVE_INTERVAL") or "0",
@@ -258,7 +247,6 @@ def config_from_args(args: Arguments) -> Config:
         s3_credentials=args.credentials,
         s3_destination=args.destination,
         keep_latest_files=args.keep_latest_files,
-        stop_bitcoin_on_error=not args.no_stop_on_error,
         prune_after_archive=args.prune_after_archive,
         min_free_space=args.min_free_space,
         bitcoin_cli=args.bitcoin_cli,
@@ -271,7 +259,8 @@ def config_from_args(args: Arguments) -> Config:
     )
 
 
-def _space_is_critical(config: Config) -> bool:
+def space_is_critical(config: Config) -> bool:
+    """True when the node has to be stopped before it fills the disk."""
     if config.min_free_space <= 0 or not config.block_dir.is_dir():
         return False
 
@@ -290,52 +279,28 @@ def _space_is_critical(config: Config) -> bool:
     return True
 
 
-def should_stop_bitcoin(config: Config, *, failed: bool) -> bool:
-    """Decide whether the node has to be stopped to protect unarchived data."""
-    if _space_is_critical(config):
-        return True
-
-    if not config.stop_bitcoin_on_error:
-        return False
-
-    if not failed:
-        return False
-
-    manual: bool
-    try:
-        manual = manual_pruning_enabled(config)
-    except Exception:
-        LOG.warning("Cannot verify node pruning mode; treating it as unsafe")
-        manual = False
-
-    if manual:
-        # Manual pruning mode: nothing is deleted unless this tool asks for
-        # it, so a failed pass costs disk space, not blocks.
-        LOG.warning(
-            "Archival failed; leaving Bitcoin Core running because manual "
-            "pruning cannot delete unarchived blocks"
-        )
-        return False
-
-    return True
-
-
 def run_pass(config: Config) -> bool:
-    """Archive once, then apply the node safety checks; True on success."""
+    """Archive once, stopping unsafe pruning or low disk; True on success."""
     failed = False
+    unsafe_pruning = False
 
     try:
         archive(config)
+
+    except UnsafePruningError:
+        LOG.exception("Unsafe or unverifiable Bitcoin Core pruning mode")
+        failed = True
+        unsafe_pruning = True
 
     except Exception:
         LOG.exception("Bitcoin block archival failed")
         failed = True
 
     try:
-        if should_stop_bitcoin(config, failed=failed):
+        if unsafe_pruning or space_is_critical(config):
             stop_bitcoin(config)
     except Exception:
-        LOG.exception("Bitcoin Core safety check or stop request failed")
+        LOG.exception("Node safety check or Bitcoin Core stop request failed")
         failed = True
 
     return not failed

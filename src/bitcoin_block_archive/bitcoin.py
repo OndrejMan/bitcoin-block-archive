@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 
 from bitcoin_block_archive.config import Config
-from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.jsonutil import load_object, require_int
 from bitcoin_block_archive.logging_setup import LOG
 from bitcoin_block_archive.process import run
@@ -67,14 +67,32 @@ def chain_height(config: Config) -> int:
     return _require_int(payload, "blocks", "getblockchaininfo")
 
 
-def manual_pruning_enabled(config: Config) -> bool:
-    info = _rpc_json(config, "getblockchaininfo")
-    return info.get("pruned") is True and info.get("automatic_pruning") is False
+def require_safe_pruning(config: Config, *, archiver_prunes: bool) -> None:
+    """Refuse a node that could delete block files before they are archived.
 
+    Automatic pruning (prune=N) deletes files on Bitcoin Core's own schedule,
+    so it races the archive and leaves silent gaps in it. Only an unpruned
+    node or manual pruning (prune=1) is accepted, and only manual pruning
+    when this tool prunes.
+    """
+    try:
+        info = _rpc_json(config, "getblockchaininfo")
+    except (ArchiveError, OSError) as error:
+        raise UnsafePruningError("Cannot verify Bitcoin Core pruning mode") from error
+    pruned = info.get("pruned")
 
-def require_manual_pruning(config: Config) -> None:
-    if not manual_pruning_enabled(config):
-        raise ArchiveError("Archive-driven pruning requires Bitcoin Core prune=1")
+    if pruned is False:
+        if archiver_prunes:
+            raise ArchiveError("Archive-driven pruning requires Bitcoin Core prune=1")
+        return
+
+    if pruned is True and info.get("automatic_pruning") is False:
+        return
+
+    raise UnsafePruningError(
+        "Bitcoin Core must not prune automatically, which can delete blocks "
+        "before they are archived; use prune=1 or no pruning"
+    )
 
 
 def prune_blockchain(config: Config, height: int) -> int:
@@ -97,7 +115,7 @@ def prune_blockchain(config: Config, height: int) -> int:
 
 
 def stop_bitcoin(config: Config) -> None:
-    LOG.critical("Stopping Bitcoin Core to prevent pruning of unarchived data")
+    LOG.critical("Requesting Bitcoin Core shutdown to protect unarchived blocks")
 
     result = cli(config, "stop", check=False)
 

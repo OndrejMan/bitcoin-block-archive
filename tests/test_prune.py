@@ -64,8 +64,11 @@ class FakeNode:
 @pytest.fixture
 def node(monkeypatch: pytest.MonkeyPatch) -> FakeNode:
     fake = FakeNode()
-    monkeypatch.setattr(archive_module, "require_manual_pruning", lambda _: None)
-    monkeypatch.setattr(prune_module, "require_manual_pruning", lambda _: None)
+    monkeypatch.setattr(
+        prune_module,
+        "require_safe_pruning",
+        lambda _config, *, archiver_prunes: None,
+    )
 
     monkeypatch.setattr(
         prune_module,
@@ -243,10 +246,11 @@ def test_manual_pruning_is_checked_before_upload(
         },
     )
 
-    def reject(_: Config) -> None:
+    def reject(_: Config, *, archiver_prunes: bool) -> None:
+        assert archiver_prunes
         raise ArchiveError("requires Bitcoin Core prune=1")
 
-    monkeypatch.setattr(archive_module, "require_manual_pruning", reject)
+    monkeypatch.setattr(archive_module, "require_safe_pruning", reject)
     client = FakeClient()
     with pytest.raises(ArchiveError, match="prune=1"):
         archive(replace(config, prune_after_archive=True), client)

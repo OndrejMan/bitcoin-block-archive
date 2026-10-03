@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from bitcoin_block_archive.bitcoin import block_height, require_manual_pruning
+from bitcoin_block_archive.bitcoin import block_height, require_safe_pruning
 from bitcoin_block_archive.blockfile import block_headers, validate_block_directory
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
@@ -186,8 +186,7 @@ def archive(config: Config, client: Uploader | None = None) -> None:
             return
 
         validate_block_directory(config.block_dir)
-        if config.prune_after_archive:
-            require_manual_pruning(config)
+        require_safe_pruning(config, archiver_prunes=config.prune_after_archive)
 
         blocks = find_archivable_blocks(config)
 

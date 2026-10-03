@@ -10,21 +10,31 @@ from bitcoin_block_archive import bitcoin
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
 
+MANUAL = {"pruned": True, "automatic_pruning": False}
+AUTOMATIC = {"pruned": True, "automatic_pruning": True}
+UNPRUNED = {"pruned": False}
+UNKNOWN = {"pruned": True}
+
 
 @pytest.mark.parametrize(
-    "info,manual",
+    "info,archiver_prunes,error",
     [
-        ({"pruned": True, "automatic_pruning": False}, True),
-        ({"pruned": True, "automatic_pruning": True}, False),
-        ({"pruned": False}, False),
-        ({"pruned": True}, False),
+        (MANUAL, True, None),
+        (MANUAL, False, None),
+        (UNPRUNED, False, None),
+        (UNPRUNED, True, "requires Bitcoin Core prune=1"),
+        (AUTOMATIC, True, "must not prune automatically"),
+        (AUTOMATIC, False, "must not prune automatically"),
+        (UNKNOWN, False, "must not prune automatically"),
+        ({}, False, "must not prune automatically"),
     ],
 )
-def test_manual_pruning_uses_rpc_state(
+def test_only_manual_or_no_pruning_is_safe(
     config: Config,
     monkeypatch: pytest.MonkeyPatch,
     info: dict[str, bool],
-    manual: bool,
+    archiver_prunes: bool,
+    error: str | None,
 ) -> None:
     config = replace(config, rpc_timeout=7)
 
@@ -39,12 +49,11 @@ def test_manual_pruning_uses_rpc_state(
         return subprocess.CompletedProcess(command, 0, json.dumps(info), "")
 
     monkeypatch.setattr(bitcoin, "run", fake_run)
-    assert bitcoin.manual_pruning_enabled(config) is manual
-    if manual:
-        bitcoin.require_manual_pruning(config)
+    if error is None:
+        bitcoin.require_safe_pruning(config, archiver_prunes=archiver_prunes)
     else:
-        with pytest.raises(ArchiveError, match="prune=1"):
-            bitcoin.require_manual_pruning(config)
+        with pytest.raises(ArchiveError, match=error):
+            bitcoin.require_safe_pruning(config, archiver_prunes=archiver_prunes)
 
 
 @pytest.mark.parametrize("height", [True, "123", None])

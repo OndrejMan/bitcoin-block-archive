@@ -4,10 +4,21 @@ from pathlib import Path
 
 import pytest
 
+from bitcoin_block_archive import archive as archive_module
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.models import ArchiveSidecarJSON
 
 PREALLOCATED_BLOCK_FILE_SIZE = 4096
+
+
+@pytest.fixture(autouse=True)
+def node_without_automatic_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Archive passes check the node's pruning mode; tests run without a node."""
+    monkeypatch.setattr(
+        archive_module,
+        "require_safe_pruning",
+        lambda _config, *, archiver_prunes: None,
+    )
 
 
 @pytest.fixture
@@ -23,7 +34,6 @@ def config(tmp_path: Path) -> Config:
         s3_credentials=tmp_path / "credentials",
         s3_destination="s3://bucket/prefix/",
         keep_latest_files=2,
-        stop_bitcoin_on_error=True,
         prune_after_archive=False,
         min_free_space=0,
         bitcoin_cli="bitcoin-cli",

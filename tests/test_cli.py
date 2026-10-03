@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from bitcoin_block_archive import archive as archive_module
 from bitcoin_block_archive import bitcoin, cli, schedule
 from bitcoin_block_archive.config import Config
-from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
+from bitcoin_block_archive.s3 import Uploader
 
 ENVIRONMENT_DEFAULTS = (
     "S3_ENDPOINT_URL",
@@ -50,15 +52,7 @@ def test_defaults_map_into_config() -> None:
 
     assert config.block_dir == Path("/var/lib/bitcoin/blocks")
     assert config.keep_latest_files == 2
-    assert config.stop_bitcoin_on_error is True
     assert config.min_free_space == 20 * 1024**3
-
-
-def test_no_stop_on_error_flag() -> None:
-    args = cli.Arguments()
-    cli.build_parser().parse_args(["--no-stop-on-error"], namespace=args)
-
-    assert cli.config_from_args(args).stop_bitcoin_on_error is False
 
 
 def test_environment_supplies_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,30 +108,14 @@ def test_invalid_rpc_port_from_environment_is_rejected(
         parse([])
 
 
-def test_main_stops_bitcoin_on_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    stopped: list[str] = []
+def test_min_free_space_accepts_human_sizes() -> None:
+    args = cli.Arguments()
+    cli.build_parser().parse_args(["--min-free-space", "20G"], namespace=args)
 
-    def failing_archive(config: object) -> None:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(cli, "archive", failing_archive)
-    monkeypatch.setattr(
-        cli,
-        "stop_bitcoin",
-        lambda config: stopped.append("stopped"),
-    )
-
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: False)
-    exit_code = cli.main(["--state-dir", str(tmp_path)])
-
-    assert exit_code == 1
-    assert stopped == ["stopped"]
+    assert cli.config_from_args(args).min_free_space == 20 * 1024**3
 
 
-def test_main_leaves_bitcoin_running_when_opted_out(
+def test_failed_pass_leaves_bitcoin_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def failing_archive(config: object) -> None:
@@ -150,86 +128,92 @@ def test_main_leaves_bitcoin_running_when_opted_out(
         lambda config: pytest.fail("should not stop Bitcoin Core"),
     )
 
-    assert cli.main(["--no-stop-on-error"]) == 1
+    assert cli.main([]) == 1
 
 
-def test_min_free_space_accepts_human_sizes() -> None:
-    args = cli.Arguments()
-    cli.build_parser().parse_args(["--min-free-space", "20G"], namespace=args)
-
-    assert cli.config_from_args(args).min_free_space == 20 * 1024**3
-
-
-def test_manual_pruning_keeps_the_node_running_after_a_failure(
+@pytest.mark.parametrize(
+    "response,archiver_prunes,expect_stop,expect_upload",
+    [
+        ('{"pruned": true, "automatic_pruning": true}', False, True, False),
+        ('{"pruned": true, "automatic_pruning": true}', True, True, False),
+        ('{"pruned": true}', False, True, False),
+        ("{}", False, True, False),
+        ("not JSON", False, True, False),
+        (ArchiveError("RPC timeout"), False, True, False),
+        (FileNotFoundError("bitcoin-cli"), False, True, False),
+        ('{"pruned": true, "automatic_pruning": false}', True, False, True),
+        ('{"pruned": false}', False, False, True),
+        ('{"pruned": false}', True, False, False),
+    ],
+)
+def test_failed_pass_stops_only_an_unsafe_or_unverified_node(
     config: Config,
     monkeypatch: pytest.MonkeyPatch,
+    response: str | Exception,
+    archiver_prunes: bool,
+    expect_stop: bool,
+    expect_upload: bool,
 ) -> None:
-    pruning = replace(config, prune_after_archive=True)
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: True)
+    commands: list[str] = []
+    uploads: list[Path] = []
+    block = config.block_dir / "blk00000.dat"
+    block.touch()
 
-    assert not cli.should_stop_bitcoin(pruning, failed=True)
+    def node_rpc(
+        command: list[str], *, check: bool = True, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command[-1])
+        if command[-1] == "stop":
+            return subprocess.CompletedProcess(command, 0, "stopping", "")
+        assert command[-1] == "getblockchaininfo"
+        if isinstance(response, Exception):
+            raise response
+        return subprocess.CompletedProcess(command, 0, response, "")
 
+    def failed_upload(_: Config, uploader: Uploader, path: Path) -> None:
+        uploads.append(path)
+        raise ArchiveError("Upload failed")
 
-def test_automatic_pruning_still_stops_the_node_after_a_failure(
-    config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: False)
-    assert cli.should_stop_bitcoin(config, failed=True)
-
-
-def test_archive_flag_is_not_proof_that_core_uses_manual_pruning(
-    config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: False)
-    assert cli.should_stop_bitcoin(
-        replace(config, prune_after_archive=True), failed=True
+    monkeypatch.setattr(bitcoin, "run", node_rpc)
+    monkeypatch.setattr(
+        archive_module, "require_safe_pruning", bitcoin.require_safe_pruning
     )
+    monkeypatch.setattr(archive_module, "archive_block", failed_upload)
+
+    assert not cli.run_pass(
+        replace(config, keep_latest_files=0, prune_after_archive=archiver_prunes)
+    )
+    assert commands == ["getblockchaininfo"] + (["stop"] if expect_stop else [])
+    assert uploads == ([block] if expect_upload else [])
 
 
-def test_upload_only_failure_on_manual_node_does_not_stop_it(
+def test_unsafe_pruning_stop_failure_is_reported(
     config: Config,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: True)
-    assert not cli.should_stop_bitcoin(config, failed=True)
+    def unsafe_archive(_: Config) -> None:
+        raise UnsafePruningError("Automatic pruning")
+
+    def failed_stop(_: Config) -> None:
+        raise ArchiveError("Stop RPC unavailable")
+
+    monkeypatch.setattr(cli, "archive", unsafe_archive)
+    monkeypatch.setattr(cli, "stop_bitcoin", failed_stop)
+    assert not cli.run_pass(config)
+    assert "Stop RPC unavailable" in caplog.text
 
 
-def test_low_disk_stops_the_node_even_on_success(config: Config) -> None:
-    guarded = replace(
-        config,
-        prune_after_archive=True,
-        min_free_space=1024**5,
-    )
+def test_low_disk_stops_the_node(config: Config) -> None:
+    guarded = replace(config, min_free_space=1024**5)
 
-    assert cli.should_stop_bitcoin(guarded, failed=False)
+    assert cli.space_is_critical(guarded)
 
 
 def test_ample_disk_does_not_stop_the_node(config: Config) -> None:
     guarded = replace(config, min_free_space=1)
 
-    assert not cli.should_stop_bitcoin(guarded, failed=False)
-
-
-def test_low_disk_stops_the_node_despite_no_stop_on_error(config: Config) -> None:
-    opted_out = replace(
-        config,
-        stop_bitcoin_on_error=False,
-        min_free_space=1024**5,
-    )
-
-    assert cli.should_stop_bitcoin(opted_out, failed=False)
-
-
-def test_no_stop_on_error_keeps_the_node_running_after_a_failure(
-    config: Config,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(cli, "manual_pruning_enabled", lambda _: False)
-    opted_out = replace(config, stop_bitcoin_on_error=False)
-
-    assert not cli.should_stop_bitcoin(opted_out, failed=True)
+    assert not cli.space_is_critical(guarded)
 
 
 @pytest.mark.parametrize(
@@ -251,7 +235,6 @@ def test_invalid_arguments_have_no_node_side_effects(
         pytest.fail("Invalid arguments must not invoke the archive or node")
 
     monkeypatch.setattr(cli, "archive", unexpected)
-    monkeypatch.setattr(cli, "manual_pruning_enabled", unexpected)
     monkeypatch.setattr(cli, "stop_bitcoin", unexpected)
     with pytest.raises(SystemExit) as error:
         cli.main(arguments)
@@ -280,7 +263,7 @@ def test_node_control_failure_returns_unsuccessful_exit(
         raise ArchiveError("RPC unavailable")
 
     monkeypatch.setattr(cli, "archive", lambda _: None)
-    monkeypatch.setattr(cli, "should_stop_bitcoin", lambda *args, **kwargs: True)
+    monkeypatch.setattr(cli, "space_is_critical", lambda _: True)
     monkeypatch.setattr(cli, "stop_bitcoin", failed_stop)
     assert cli.main([]) == 1
 
@@ -337,7 +320,7 @@ def test_main_with_interval_repeats_passes_until_stopped(
     monkeypatch.setattr(cli, "archive", archive_then_stop)
     monkeypatch.setattr(cli, "run_repeatedly", fast_run_repeatedly)
 
-    assert cli.main(["--interval", "30m", "--no-stop-on-error"]) == 0
+    assert cli.main(["--interval", "30m"]) == 0
     assert passes == [0, 1]
 
 
@@ -355,7 +338,7 @@ def test_main_with_interval_survives_a_failed_pass(
     monkeypatch.setattr(cli, "archive", fail_then_stop)
     monkeypatch.setattr(cli, "run_repeatedly", fast_run_repeatedly)
 
-    assert cli.main(["--interval", "30m", "--no-stop-on-error"]) == 0
+    assert cli.main(["--interval", "30m"]) == 0
     assert passes == [0, 1]
 
 
