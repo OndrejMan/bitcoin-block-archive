@@ -22,7 +22,7 @@ SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 def file_signature(path: Path) -> FileSignature:
     stat = path.stat()
-    return FileSignature(stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    return FileSignature(stat.st_size, stat.st_mtime_ns)
 
 
 def _height_ranges(value: object, context: str) -> tuple[HeightRange, ...]:
@@ -97,7 +97,6 @@ def _source_signature(
     return FileSignature(
         size,
         require_int(payload.get("mtime_ns"), f"{context} mtime_ns"),
-        require_int(payload.get("ctime_ns"), f"{context} ctime_ns"),
     )
 
 

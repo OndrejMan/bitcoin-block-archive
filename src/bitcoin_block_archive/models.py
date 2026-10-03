@@ -12,7 +12,6 @@ HeightRange = tuple[int, int]
 class FileSignature(NamedTuple):
     size: int
     mtime_ns: int
-    ctime_ns: int
 
 
 class ArchiveSidecarJSON(TypedDict):
@@ -27,7 +26,6 @@ class _ArchiveMarkerRequired(ArchiveSidecarJSON):
     destination: str
     endpoint: str
     mtime_ns: int
-    ctime_ns: int
 
 
 class ArchiveMarkerJSON(_ArchiveMarkerRequired):
@@ -59,6 +57,5 @@ class ArchiveMarker:
             "destination": self.destination,
             "endpoint": self.endpoint,
             "mtime_ns": self.source_signature.mtime_ns,
-            "ctime_ns": self.source_signature.ctime_ns,
         }
         return payload

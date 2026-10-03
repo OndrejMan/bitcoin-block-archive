@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import stat
+import time
 from pathlib import Path
 
 import pytest
@@ -46,7 +48,6 @@ def test_marker_roundtrip(config: Config) -> None:
         "destination": "s3://bucket/prefix/blk00000.dat",
         "endpoint": "https://s3.example.invalid",
         "mtime_ns": signature.mtime_ns,
-        "ctime_ns": signature.ctime_ns,
     }
 
 
@@ -105,7 +106,6 @@ def test_typed_marker_preserves_json_and_source_metadata(
     [
         ("size", True),
         ("mtime_ns", "123"),
-        ("ctime_ns", False),
         ("schema_version", 2),
         ("schema_version", True),
         ("height_ranges", []),
@@ -126,15 +126,25 @@ def test_invalid_metadata_is_rejected_when_reading_marker(
         read_marker(config, path)
 
 
-def test_partial_source_signature_is_rejected(
+def test_metadata_change_keeps_the_marker(config: Config, marked_file: Path) -> None:
+    # The Bitcoin Core image chowns its datadir on every start; chmod stands in
+    # for it here, since both update ctime but not mtime or content.
+    before = marked_file.stat().st_ctime_ns
+    deadline = time.monotonic() + 2
+    while marked_file.stat().st_ctime_ns == before:
+        assert time.monotonic() < deadline, "ctime did not advance"
+        marked_file.chmod(marked_file.stat().st_mode ^ stat.S_IXUSR)
+    assert already_archived(config, marked_file)
+
+
+def test_marker_with_a_ctime_from_an_older_version_is_accepted(
     config: Config, marked_file: Path
 ) -> None:
     path = marker_path(config, marked_file)
     payload = json.loads(path.read_text())
-    del payload["ctime_ns"]
+    payload["ctime_ns"] = 1
     path.write_text(json.dumps(payload))
-    with pytest.raises(ArchiveError, match="ctime_ns"):
-        read_marker(config, path)
+    assert already_archived(config, marked_file)
 
 
 def test_marker_without_source_signature_is_rejected(
@@ -142,7 +152,7 @@ def test_marker_without_source_signature_is_rejected(
 ) -> None:
     path = marker_path(config, marked_file)
     payload = json.loads(path.read_text())
-    del payload["mtime_ns"], payload["ctime_ns"]
+    del payload["mtime_ns"]
     path.write_text(json.dumps(payload))
     with pytest.raises(ArchiveError, match="mtime_ns"):
         already_archived(config, marked_file)
