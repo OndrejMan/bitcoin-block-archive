@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -176,7 +177,12 @@ def archive_block(
     )
 
 
-def archive(config: Config, client: Uploader | None = None) -> None:
+def archive(
+    config: Config,
+    client: Uploader | None = None,
+    *,
+    cancelled: threading.Event | None = None,
+) -> None:
     config.state_dir.mkdir(parents=True, exist_ok=True)
 
     uploader = client if client is not None else S5cmdClient(config)
@@ -186,6 +192,7 @@ def archive(config: Config, client: Uploader | None = None) -> None:
             LOG.info("Another archive process is already running")
             return
 
+        _check_cancelled(cancelled)
         validate_block_directory(config.block_dir)
         require_safe_pruning(config, archiver_prunes=config.prune_after_archive)
 
@@ -202,6 +209,13 @@ def archive(config: Config, client: Uploader | None = None) -> None:
         # An empty pass still retries pruning files retained by Core earlier.
         for start in range(0, max(1, len(blocks)), PRUNE_BATCH_FILES):
             for block_file in blocks[start : start + PRUNE_BATCH_FILES]:
+                _check_cancelled(cancelled)
                 archive_block(config, uploader, block_file)
+            _check_cancelled(cancelled)
             if config.prune_after_archive:
                 prune_archived_blocks(config, uploader, height_cache=height_cache)
+
+
+def _check_cancelled(cancelled: threading.Event | None) -> None:
+    if cancelled is not None and cancelled.is_set():
+        raise ArchiveError("Archival stopped by disk watchdog")

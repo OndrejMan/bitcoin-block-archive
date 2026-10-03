@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from bitcoin_block_archive import archive as archive_module
-from bitcoin_block_archive import bitcoin, cli, schedule
+from bitcoin_block_archive import bitcoin, cli, schedule, watchdog
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.s3 import Uploader
@@ -36,7 +36,7 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def one_tebibyte_free(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the default 20 GiB watchdog independent of the test host's disk."""
-    monkeypatch.setattr(cli, "free_bytes", lambda _: 1024**4)
+    monkeypatch.setattr(watchdog, "free_bytes", lambda _: 1024**4)
 
 
 def parse(argv: list[str]) -> Config:
@@ -118,7 +118,9 @@ def test_min_free_space_accepts_human_sizes() -> None:
 def test_failed_pass_leaves_bitcoin_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def failing_archive(config: object) -> None:
+    def failing_archive(
+        config: Config, *, cancelled: threading.Event | None = None
+    ) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(cli, "archive", failing_archive)
@@ -192,7 +194,7 @@ def test_unsafe_pruning_stop_failure_is_reported(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    def unsafe_archive(_: Config) -> None:
+    def unsafe_archive(_: Config, *, cancelled: threading.Event | None = None) -> None:
         raise UnsafePruningError("Automatic pruning")
 
     def failed_stop(_: Config) -> None:
@@ -207,13 +209,13 @@ def test_unsafe_pruning_stop_failure_is_reported(
 def test_low_disk_stops_the_node(config: Config) -> None:
     guarded = replace(config, min_free_space=1024**5)
 
-    assert cli.space_is_critical(guarded)
+    assert watchdog.space_is_critical(guarded)
 
 
 def test_ample_disk_does_not_stop_the_node(config: Config) -> None:
     guarded = replace(config, min_free_space=1)
 
-    assert not cli.space_is_critical(guarded)
+    assert not watchdog.space_is_critical(guarded)
 
 
 @pytest.mark.parametrize(
@@ -262,9 +264,9 @@ def test_node_control_failure_returns_unsuccessful_exit(
     def failed_stop(_: Config) -> None:
         raise ArchiveError("RPC unavailable")
 
-    monkeypatch.setattr(cli, "archive", lambda _: None)
-    monkeypatch.setattr(cli, "space_is_critical", lambda _: True)
-    monkeypatch.setattr(cli, "stop_bitcoin", failed_stop)
+    monkeypatch.setattr(cli, "archive", lambda _, **kwargs: None)
+    monkeypatch.setattr(watchdog, "space_is_critical", lambda _: True)
+    monkeypatch.setattr(watchdog, "stop_bitcoin", failed_stop)
     assert cli.main([]) == 1
 
 
@@ -277,10 +279,24 @@ def test_failed_low_disk_stop_does_not_report_success(
         assert command[-1] == "stop"
         return subprocess.CompletedProcess(command, 1, "", "RPC unavailable")
 
-    monkeypatch.setattr(cli, "archive", lambda _: None)
-    monkeypatch.setattr(cli, "free_bytes", lambda _: 0)
+    monkeypatch.setattr(cli, "archive", lambda _, **kwargs: None)
+    monkeypatch.setattr(watchdog, "free_bytes", lambda _: 0)
     monkeypatch.setattr(bitcoin, "run", failed_rpc)
     assert cli.main(["--block-dir", str(tmp_path), "--min-free-space", "1"]) == 1
+
+
+def test_critical_disk_stops_core_before_starting_uploads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(watchdog, "free_bytes", lambda _: 0)
+    monkeypatch.setattr(
+        cli, "archive", lambda *args, **kwargs: events.append("archive")
+    )
+    monkeypatch.setattr(watchdog, "stop_bitcoin", lambda _: events.append("stop"))
+
+    assert cli.main(["--block-dir", str(tmp_path), "--min-free-space", "1"]) == 1
+    assert events == ["stop"]
 
 
 def test_interval_defaults_to_a_single_pass() -> None:
@@ -312,7 +328,9 @@ def test_main_with_interval_repeats_passes_until_stopped(
 ) -> None:
     passes: list[int] = []
 
-    def archive_then_stop(_: Config) -> None:
+    def archive_then_stop(
+        _: Config, *, cancelled: threading.Event | None = None
+    ) -> None:
         passes.append(len(passes))
         if len(passes) == 2:
             os.kill(os.getpid(), signal.SIGTERM)
@@ -329,7 +347,7 @@ def test_main_with_interval_survives_a_failed_pass(
 ) -> None:
     passes: list[int] = []
 
-    def fail_then_stop(_: Config) -> None:
+    def fail_then_stop(_: Config, *, cancelled: threading.Event | None = None) -> None:
         passes.append(len(passes))
         if len(passes) == 2:
             os.kill(os.getpid(), signal.SIGTERM)

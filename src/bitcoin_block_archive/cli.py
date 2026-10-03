@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import threading
 from pathlib import Path
 
 from bitcoin_block_archive import __version__
@@ -25,7 +26,7 @@ from bitcoin_block_archive.config import (
     Config,
     default_credentials,
 )
-from bitcoin_block_archive.disk import format_size, free_bytes, parse_size
+from bitcoin_block_archive.disk import parse_size
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.logging_setup import LOG, configure
 from bitcoin_block_archive.schedule import (
@@ -33,6 +34,7 @@ from bitcoin_block_archive.schedule import (
     run_repeatedly,
     stop_on_signals,
 )
+from bitcoin_block_archive.watchdog import watch_disk
 
 
 class Arguments(argparse.Namespace):
@@ -197,7 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SIZE",
         help=(
             "Stop Bitcoin Core when free space in the block directory falls "
-            "below SIZE (default: 20G). 0 disables the watchdog."
+            "below SIZE (default: 20G), checked every 30 seconds even during "
+            "uploads. 0 disables the watchdog."
         ),
     )
 
@@ -259,51 +262,21 @@ def config_from_args(args: Arguments) -> Config:
     )
 
 
-def space_is_critical(config: Config) -> bool:
-    """True when the node has to be stopped before it fills the disk."""
-    if config.min_free_space <= 0 or not config.block_dir.is_dir():
-        return False
-
-    free = free_bytes(config.block_dir)
-
-    if free >= config.min_free_space:
-        return False
-
-    LOG.critical(
-        "Only %s free in %s, below the %s threshold",
-        format_size(free),
-        config.block_dir,
-        format_size(config.min_free_space),
-    )
-
-    return True
-
-
-def run_pass(config: Config) -> bool:
-    """Archive once, stopping unsafe pruning or low disk; True on success."""
-    failed = False
-    unsafe_pruning = False
-
+def run_pass(config: Config, cancelled: threading.Event | None = None) -> bool:
+    """Archive once, stopping a node with unsafe pruning; True on success."""
     try:
-        archive(config)
-
+        archive(config, cancelled=cancelled)
     except UnsafePruningError:
         LOG.exception("Unsafe or unverifiable Bitcoin Core pruning mode")
-        failed = True
-        unsafe_pruning = True
-
+        try:
+            stop_bitcoin(config)
+        except Exception:
+            LOG.exception("Bitcoin Core stop request failed")
+        return False
     except Exception:
         LOG.exception("Bitcoin block archival failed")
-        failed = True
-
-    try:
-        if unsafe_pruning or space_is_critical(config):
-            stop_bitcoin(config)
-    except Exception:
-        LOG.exception("Node safety check or Bitcoin Core stop request failed")
-        failed = True
-
-    return not failed
+        return False
+    return cancelled is None or not cancelled.is_set()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -314,10 +287,12 @@ def main(argv: list[str] | None = None) -> int:
 
     config = config_from_args(args)
 
-    if args.interval == 0:
-        return 0 if run_pass(config) else 1
+    succeeded = True
+    with stop_on_signals() as stop, watch_disk(config, stop) as tripped:
+        if not stop.is_set():
+            if args.interval == 0:
+                succeeded = run_pass(config, tripped)
+            else:
+                run_repeatedly(lambda: run_pass(config, tripped), args.interval, stop)
 
-    with stop_on_signals() as stop:
-        run_repeatedly(lambda: run_pass(config), args.interval, stop)
-
-    return 0
+    return 0 if succeeded and not tripped.is_set() else 1

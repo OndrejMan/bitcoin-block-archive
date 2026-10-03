@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -259,6 +260,26 @@ def test_batches_reuse_hash_heights_but_check_new_files_and_current_tip(
     node.heights.update(make_chain(config, {"blk00001.dat": 398_000}))
     assert safe_prune_height(config, height_cache=cache) == 397_999
     assert len(requests) == 2
+
+
+def test_disk_trip_during_last_upload_prevents_pruning(
+    config: Config, node: FakeNode
+) -> None:
+    node.heights = make_chain(
+        config, {"blk00000.dat": 10, "blk00001.dat": 300, "blk00002.dat": 600}
+    )
+    cancelled = threading.Event()
+
+    class LowDisk(FakeClient):
+        def upload(self, source: Path, destination: str) -> None:
+            super().upload(source, destination)
+            cancelled.set()
+
+    with pytest.raises(ArchiveError, match="disk watchdog"):
+        archive(
+            replace(config, prune_after_archive=True), LowDisk(), cancelled=cancelled
+        )
+    assert node.pruned == []
 
 
 def test_archived_file_still_on_disk_does_not_raise_the_height(
