@@ -62,7 +62,7 @@ services:
     # split like a shell command line.
     command: >-
       --block-dir /bitcoin/blocks --state-dir /state
-      ${ARCHIVER_ARGS:---keep-latest-files 2 --no-stop-on-error}
+      ${ARCHIVER_ARGS:---keep-latest-files 2 --no-stop-on-error --prune-after-archive}
     # SIGTERM ends the wait at once and otherwise lets the running pass finish.
     # A pass still running after the grace period is killed; the next pass
     # repeats its unverified uploads.
