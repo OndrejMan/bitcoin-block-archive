@@ -62,7 +62,9 @@ def safe_prune_height(config: Config) -> int | None:
     if not heights:
         return None
 
-    return min(heights) - 1
+    # Downloaded blocks may be ahead of the active chain during synchronization.
+    # Core rejects a manual prune height above its active tip.
+    return min(min(heights) - 1, chain_height(config))
 
 
 def _verify_archived_local_files(config: Config, uploader: Uploader) -> None:

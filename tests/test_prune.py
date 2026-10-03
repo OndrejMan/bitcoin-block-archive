@@ -207,6 +207,18 @@ def test_failed_upload_leaves_blocks_unpruned(
     assert node.pruned == []
 
 
+def test_pruning_during_sync_never_requests_a_height_above_the_tip(
+    config: Config, node: FakeNode
+) -> None:
+    config.state_dir.mkdir()
+    node.heights = make_chain(config, {"blk00000.dat": 100, "blk00001.dat": 400_000})
+    mark_first_file(config)
+    node.tip = 399_000
+
+    prune_archived_blocks(config, FakeClient())
+    assert node.pruned == [399_000]
+
+
 def test_archived_file_still_on_disk_does_not_raise_the_height(
     config: Config,
     node: FakeNode,
