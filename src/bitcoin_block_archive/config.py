@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,9 +12,7 @@ DEFAULT_BITCOIN_CLI = "bitcoin-cli"
 
 DEFAULT_S3_ENDPOINT = "https://s3.cl4.du.cesnet.cz"
 DEFAULT_S3_PROFILE = "coinjoin"
-DEFAULT_S3_DESTINATION = os.environ.get(
-    "S3_DESTINATION", "s3://xman-coinjoin/bitcoin-mainnet/blocks"
-)
+DEFAULT_S3_DESTINATION = "s3://xman-coinjoin/bitcoin-mainnet/blocks"
 
 DEFAULT_KEEP_LATEST_FILES = 2
 DEFAULT_MIN_FREE_SPACE = 0  # bytes; 0 disables the watchdog

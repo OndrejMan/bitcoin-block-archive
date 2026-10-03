@@ -10,6 +10,27 @@ from bitcoin_block_archive import bitcoin, cli
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
 
+ENVIRONMENT_DEFAULTS = (
+    "S3_ENDPOINT_URL",
+    "S3_PROFILE",
+    "S3_DESTINATION",
+    "BITCOIN_DATADIR",
+    "BITCOIN_RPC_HOST",
+    "BITCOIN_RPC_PORT",
+)
+
+
+@pytest.fixture(autouse=True)
+def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ENVIRONMENT_DEFAULTS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def parse(argv: list[str]) -> Config:
+    args = cli.Arguments()
+    cli.build_parser().parse_args(argv, namespace=args)
+    return cli.config_from_args(args)
+
 
 def test_defaults_map_into_config() -> None:
     args = cli.Arguments()
@@ -26,6 +47,59 @@ def test_no_stop_on_error_flag() -> None:
     cli.build_parser().parse_args(["--no-stop-on-error"], namespace=args)
 
     assert cli.config_from_args(args).stop_bitcoin_on_error is False
+
+
+def test_environment_supplies_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("S3_ENDPOINT_URL", "https://s3.example.invalid")
+    monkeypatch.setenv("S3_PROFILE", "archive")
+    monkeypatch.setenv("S3_DESTINATION", "s3://bucket/blocks")
+    monkeypatch.setenv("BITCOIN_DATADIR", "/bitcoin")
+    monkeypatch.setenv("BITCOIN_RPC_HOST", "bitcoin-core")
+    monkeypatch.setenv("BITCOIN_RPC_PORT", "8332")
+
+    config = parse([])
+
+    assert config.s3_endpoint == "https://s3.example.invalid"
+    assert config.s3_profile == "archive"
+    assert config.s3_destination == "s3://bucket/blocks"
+    assert config.bitcoin_datadir == Path("/bitcoin")
+    assert config.bitcoin_rpc_host == "bitcoin-core"
+    assert config.bitcoin_rpc_port == 8332
+
+
+def test_flags_override_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("S3_ENDPOINT_URL", "https://s3.example.invalid")
+    monkeypatch.setenv("BITCOIN_RPC_PORT", "8332")
+
+    config = parse(["--endpoint", "https://other.invalid", "--rpc-port", "18443"])
+
+    assert config.s3_endpoint == "https://other.invalid"
+    assert config.bitcoin_rpc_port == 18443
+
+
+def test_empty_environment_keeps_builtin_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Compose passes `${VAR:-}` through as an empty string.
+    for name in ENVIRONMENT_DEFAULTS:
+        monkeypatch.setenv(name, "")
+
+    config = parse([])
+
+    assert config.s3_endpoint == "https://s3.cl4.du.cesnet.cz"
+    assert config.s3_destination == "s3://xman-coinjoin/bitcoin-mainnet/blocks"
+    assert config.bitcoin_datadir == Path("/var/lib/bitcoin")
+    assert config.bitcoin_rpc_host is None
+    assert config.bitcoin_rpc_port is None
+
+
+def test_invalid_rpc_port_from_environment_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BITCOIN_RPC_PORT", "0")
+
+    with pytest.raises(SystemExit):
+        parse([])
 
 
 def test_main_stops_bitcoin_on_failure(

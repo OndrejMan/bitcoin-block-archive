@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from bitcoin_block_archive import __version__
@@ -66,6 +67,11 @@ def _positive_int(text: str) -> int:
     return value
 
 
+def _env(name: str) -> str | None:
+    """Environment value used as a flag default; empty counts as unset."""
+    return os.environ.get(name) or None
+
+
 def _size_argument(text: str) -> int:
     try:
         return parse_size(text)
@@ -101,12 +107,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--endpoint",
-        default=DEFAULT_S3_ENDPOINT,
+        default=_env("S3_ENDPOINT_URL") or DEFAULT_S3_ENDPOINT,
+        help="S3 endpoint URL (env: S3_ENDPOINT_URL).",
     )
 
     parser.add_argument(
         "--profile",
-        default=DEFAULT_S3_PROFILE,
+        default=_env("S3_PROFILE") or DEFAULT_S3_PROFILE,
+        help="Profile in the credentials file (env: S3_PROFILE).",
     )
 
     parser.add_argument(
@@ -117,7 +125,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--destination",
-        default=DEFAULT_S3_DESTINATION,
+        default=_env("S3_DESTINATION") or DEFAULT_S3_DESTINATION,
+        help="S3 prefix for block files (env: S3_DESTINATION).",
     )
 
     parser.add_argument(
@@ -138,22 +147,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--bitcoin-datadir",
         type=Path,
-        default=DEFAULT_BITCOIN_DATADIR,
+        default=_env("BITCOIN_DATADIR") or DEFAULT_BITCOIN_DATADIR,
+        help="Datadir holding the RPC cookie (env: BITCOIN_DATADIR).",
     )
 
     parser.add_argument(
         "--rpc-host",
+        default=_env("BITCOIN_RPC_HOST"),
         help=(
             "Bitcoin Core RPC host, for a node in another container "
-            "(default: bitcoin-cli's localhost)."
+            "(env: BITCOIN_RPC_HOST; default: bitcoin-cli's localhost)."
         ),
     )
 
     parser.add_argument(
         "--rpc-port",
         type=_positive_int,
+        default=_env("BITCOIN_RPC_PORT"),
         metavar="PORT",
-        help="Bitcoin Core RPC port.",
+        help="Bitcoin Core RPC port (env: BITCOIN_RPC_PORT).",
     )
 
     parser.add_argument(
