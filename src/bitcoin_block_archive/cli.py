@@ -41,6 +41,8 @@ class Arguments(argparse.Namespace):
     keep_latest_files: int
     bitcoin_cli: str
     bitcoin_datadir: Path
+    rpc_host: str | None
+    rpc_port: int | None
     prune_after_archive: bool
     min_free_space: int
     no_stop_on_error: bool
@@ -140,6 +142,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--rpc-host",
+        help=(
+            "Bitcoin Core RPC host, for a node in another container "
+            "(default: bitcoin-cli's localhost)."
+        ),
+    )
+
+    parser.add_argument(
+        "--rpc-port",
+        type=_positive_int,
+        metavar="PORT",
+        help="Bitcoin Core RPC port.",
+    )
+
+    parser.add_argument(
         "--prune-after-archive",
         action="store_true",
         help=(
@@ -210,6 +227,8 @@ def config_from_args(args: Arguments) -> Config:
         min_free_space=args.min_free_space,
         bitcoin_cli=args.bitcoin_cli,
         bitcoin_datadir=args.bitcoin_datadir,
+        bitcoin_rpc_host=args.rpc_host,
+        bitcoin_rpc_port=args.rpc_port,
         rpc_timeout=args.rpc_timeout,
         upload_timeout=args.upload_timeout,
         verify_timeout=args.verify_timeout,

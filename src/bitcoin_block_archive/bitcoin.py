@@ -16,12 +16,17 @@ def cli(
     *arguments: str,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    command = [config.bitcoin_cli, f"-datadir={config.bitcoin_datadir}"]
+
+    # The cookie is still read from the datadir, so a node in another
+    # container only needs its address, not separate RPC credentials.
+    if config.bitcoin_rpc_host is not None:
+        command.append(f"-rpcconnect={config.bitcoin_rpc_host}")
+    if config.bitcoin_rpc_port is not None:
+        command.append(f"-rpcport={config.bitcoin_rpc_port}")
+
     return run(
-        [
-            config.bitcoin_cli,
-            f"-datadir={config.bitcoin_datadir}",
-            *arguments,
-        ],
+        [*command, *arguments],
         check=check,
         timeout=config.rpc_timeout,
     )

@@ -48,6 +48,8 @@ class Config:
 
     bitcoin_cli: str
     bitcoin_datadir: Path
+    bitcoin_rpc_host: str | None = None
+    bitcoin_rpc_port: int | None = None
 
     rpc_timeout: int = DEFAULT_RPC_TIMEOUT
     upload_timeout: int = DEFAULT_UPLOAD_TIMEOUT

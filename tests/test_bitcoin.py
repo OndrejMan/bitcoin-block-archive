@@ -75,3 +75,53 @@ def test_failed_stop_is_reported_to_the_caller(
     monkeypatch.setattr(bitcoin, "run", failed_run)
     with pytest.raises(ArchiveError, match="RPC unavailable"):
         bitcoin.stop_bitcoin(config)
+
+
+def record_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[list[str]]:
+    commands: list[list[str]] = []
+
+    def fake_run(
+        command: list[str], *, check: bool = True, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(bitcoin, "run", fake_run)
+    return commands
+
+
+def test_local_node_uses_bitcoin_cli_defaults(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands = record_commands(monkeypatch)
+
+    bitcoin.cli(config, "getblockchaininfo")
+
+    assert commands == [
+        [
+            "bitcoin-cli",
+            f"-datadir={config.bitcoin_datadir}",
+            "getblockchaininfo",
+        ]
+    ]
+
+
+def test_remote_node_is_addressed_by_host_and_port(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(config, bitcoin_rpc_host="bitcoin-core", bitcoin_rpc_port=8332)
+    commands = record_commands(monkeypatch)
+
+    bitcoin.cli(config, "getblockchaininfo")
+
+    assert commands == [
+        [
+            "bitcoin-cli",
+            f"-datadir={config.bitcoin_datadir}",
+            "-rpcconnect=bitcoin-core",
+            "-rpcport=8332",
+            "getblockchaininfo",
+        ]
+    ]
