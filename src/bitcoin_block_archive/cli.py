@@ -28,6 +28,11 @@ from bitcoin_block_archive.config import (
 from bitcoin_block_archive.disk import format_size, free_bytes, parse_size
 from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.logging_setup import LOG, configure
+from bitcoin_block_archive.schedule import (
+    parse_duration,
+    run_repeatedly,
+    stop_on_signals,
+)
 
 
 class Arguments(argparse.Namespace):
@@ -51,6 +56,7 @@ class Arguments(argparse.Namespace):
     rpc_timeout: int
     upload_timeout: int
     verify_timeout: int
+    interval: int
 
 
 def _nonnegative_int(text: str) -> int:
@@ -76,6 +82,13 @@ def _size_argument(text: str) -> int:
     try:
         return parse_size(text)
     except (ArchiveError, OverflowError) as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
+def _duration_argument(text: str) -> int:
+    try:
+        return parse_duration(text)
+    except ArchiveError as error:
         raise argparse.ArgumentTypeError(str(error)) from error
 
 
@@ -200,6 +213,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--interval",
+        type=_duration_argument,
+        default=_env("ARCHIVE_INTERVAL") or "0",
+        metavar="DURATION",
+        help=(
+            "Repeat the pass every DURATION (e.g. 30m) until SIGTERM or "
+            "SIGINT; 0 runs a single pass (env: ARCHIVE_INTERVAL)."
+        ),
+    )
+
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -296,14 +320,8 @@ def should_stop_bitcoin(config: Config, *, failed: bool) -> bool:
     return True
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = Arguments()
-    build_parser().parse_args(argv, namespace=args)
-
-    configure(verbose=args.verbose)
-
-    config = config_from_args(args)
-
+def run_pass(config: Config) -> bool:
+    """Archive once, then apply the node safety checks; True on success."""
     failed = False
 
     try:
@@ -320,4 +338,21 @@ def main(argv: list[str] | None = None) -> int:
         LOG.exception("Bitcoin Core safety check or stop request failed")
         failed = True
 
-    return 1 if failed else 0
+    return not failed
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = Arguments()
+    build_parser().parse_args(argv, namespace=args)
+
+    configure(verbose=args.verbose)
+
+    config = config_from_args(args)
+
+    if args.interval == 0:
+        return 0 if run_pass(config) else 1
+
+    with stop_on_signals() as stop:
+        run_repeatedly(lambda: run_pass(config), args.interval, stop)
+
+    return 0
