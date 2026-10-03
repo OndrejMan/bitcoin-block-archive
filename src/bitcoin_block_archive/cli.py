@@ -184,7 +184,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--prune-after-archive",
         action="store_true",
         help=(
-            "After a successful pass, call `pruneblockchain` up to the "
+            "After each verified batch, call `pruneblockchain` up to the "
             "highest height that cannot delete an unarchived block file. "
             "Requires prune=1 (manual pruning) in bitcoin.conf."
         ),

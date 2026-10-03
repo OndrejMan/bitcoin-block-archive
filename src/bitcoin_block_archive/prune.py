@@ -26,7 +26,9 @@ from bitcoin_block_archive.state import (
 )
 
 
-def safe_prune_height(config: Config) -> int | None:
+def safe_prune_height(
+    config: Config, *, height_cache: dict[str, int] | None = None
+) -> int | None:
     """Highest height that cannot delete an unarchived block file.
 
     Bitcoin Core deletes a blk/rev pair only once the *highest* block it
@@ -49,6 +51,7 @@ def safe_prune_height(config: Config) -> int | None:
         return chain_height(config)
 
     heights = []
+    cache = height_cache if height_cache is not None else {}
 
     for block_file in pending:
         block = first_block_hash(block_file)
@@ -57,7 +60,9 @@ def safe_prune_height(config: Config) -> int | None:
             LOG.debug("%s holds no block yet", block_file.name)
             continue
 
-        heights.append(block_height(config, block))
+        if block not in cache:
+            cache[block] = block_height(config, block)
+        heights.append(cache[block])
 
     if not heights:
         return None
@@ -81,11 +86,16 @@ def _verify_archived_local_files(config: Config, uploader: Uploader) -> None:
             )
 
 
-def prune_archived_blocks(config: Config, client: Uploader | None = None) -> None:
+def prune_archived_blocks(
+    config: Config,
+    client: Uploader | None = None,
+    *,
+    height_cache: dict[str, int] | None = None,
+) -> None:
     require_safe_pruning(config, archiver_prunes=True)
     uploader = client if client is not None else S5cmdClient(config)
     _verify_archived_local_files(config, uploader)
-    height = safe_prune_height(config)
+    height = safe_prune_height(config, height_cache=height_cache)
 
     if height is None:
         LOG.info("No safe prune height could be determined; not pruning")

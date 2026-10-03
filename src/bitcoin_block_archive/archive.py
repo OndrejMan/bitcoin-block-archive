@@ -21,6 +21,7 @@ from bitcoin_block_archive.s3 import S5cmdClient, Uploader
 from bitcoin_block_archive.state import already_archived, file_signature, write_marker
 
 BLOCK_FILE_GLOB = "blk*.dat"
+PRUNE_BATCH_FILES = 16
 
 
 @dataclass(frozen=True)
@@ -189,15 +190,18 @@ def archive(config: Config, client: Uploader | None = None) -> None:
         require_safe_pruning(config, archiver_prunes=config.prune_after_archive)
 
         blocks = find_archivable_blocks(config)
+        # Heights are immutable for a given block hash. Reuse the lookups when
+        # each batch examines the remaining files in a large initial backlog.
+        height_cache: dict[str, int] = {}
 
         if not blocks:
             LOG.info("No completed block files to archive")
         else:
             LOG.info("Found %d block file(s) to archive", len(blocks))
 
-            for block_file in blocks:
+        # An empty pass still retries pruning files retained by Core earlier.
+        for start in range(0, max(1, len(blocks)), PRUNE_BATCH_FILES):
+            for block_file in blocks[start : start + PRUNE_BATCH_FILES]:
                 archive_block(config, uploader, block_file)
-
-        # Only reached when every selected block file is safely in S3.
-        if config.prune_after_archive:
-            prune_archived_blocks(config, uploader)
+            if config.prune_after_archive:
+                prune_archived_blocks(config, uploader, height_cache=height_cache)

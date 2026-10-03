@@ -173,7 +173,7 @@ def test_nothing_archived_yet_prunes_nothing(
     assert node.pruned == []
 
 
-def test_prune_after_archive_runs_at_end_of_pass(
+def test_partial_batch_is_pruned_at_end_of_pass(
     config: Config,
     node: FakeNode,
 ) -> None:
@@ -207,6 +207,25 @@ def test_failed_upload_leaves_blocks_unpruned(
     assert node.pruned == []
 
 
+def test_completed_batch_is_pruned_before_a_later_upload_fails(
+    config: Config, node: FakeNode
+) -> None:
+    node.heights = make_chain(
+        config, {f"blk{number:05d}.dat": number for number in range(20)}
+    )
+
+    class LaterFailure(FakeClient):
+        def upload(self, source: Path, destination: str) -> None:
+            if source.name == "blk00016.dat":
+                assert node.pruned == [15]
+                raise RuntimeError("later upload failed")
+            super().upload(source, destination)
+
+    with pytest.raises(RuntimeError, match="later upload failed"):
+        archive(replace(config, prune_after_archive=True), LaterFailure())
+    assert node.pruned == [15]
+
+
 def test_pruning_during_sync_never_requests_a_height_above_the_tip(
     config: Config, node: FakeNode
 ) -> None:
@@ -217,6 +236,29 @@ def test_pruning_during_sync_never_requests_a_height_above_the_tip(
 
     prune_archived_blocks(config, FakeClient())
     assert node.pruned == [399_000]
+
+
+def test_batches_reuse_hash_heights_but_check_new_files_and_current_tip(
+    config: Config, node: FakeNode, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node.heights = make_chain(config, {"blk00000.dat": 400_000})
+    requests: list[str] = []
+
+    def lookup(_: Config, digest: str) -> int:
+        requests.append(digest)
+        return node.heights[digest]
+
+    monkeypatch.setattr(prune_module, "block_height", lookup)
+    cache: dict[str, int] = {}
+    node.tip = 399_000
+    assert safe_prune_height(config, height_cache=cache) == 399_000
+    node.tip = 399_500
+    assert safe_prune_height(config, height_cache=cache) == 399_500
+    assert len(requests) == 1
+
+    node.heights.update(make_chain(config, {"blk00001.dat": 398_000}))
+    assert safe_prune_height(config, height_cache=cache) == 397_999
+    assert len(requests) == 2
 
 
 def test_archived_file_still_on_disk_does_not_raise_the_height(
