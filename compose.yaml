@@ -53,6 +53,8 @@ services:
       BITCOIN_DATADIR: /bitcoin
       BITCOIN_RPC_HOST: bitcoin-core
       BITCOIN_RPC_PORT: "8332"
+      # Seconds between passes, or 30m / 2h; 0 runs one pass and exits.
+      ARCHIVE_INTERVAL: ${ARCHIVE_INTERVAL:-30m}
     volumes:
       - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
       - archive-state:/state
@@ -61,7 +63,12 @@ services:
     command: >-
       --block-dir /bitcoin/blocks --state-dir /state
       ${ARCHIVER_ARGS:---keep-latest-files 2 --no-stop-on-error}
-    restart: "no"
+    # SIGTERM ends the wait at once and otherwise lets the running pass finish.
+    # A pass still running after the grace period is killed; the next pass
+    # repeats its unverified uploads.
+    init: true
+    stop_grace_period: 10m
+    restart: unless-stopped
 
 volumes:
   bitcoin-data:
