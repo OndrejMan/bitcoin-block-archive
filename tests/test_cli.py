@@ -93,7 +93,7 @@ def test_empty_environment_keeps_builtin_defaults(
     config = parse([])
 
     assert config.s3_endpoint == "https://s3.cl4.du.cesnet.cz"
-    assert config.s3_destination == "s3://xman-coinjoin/bitcoin-mainnet/blocks"
+    assert config.s3_destination == "s3://xman-coinjoin-new/bitcoin-mainnet/blocks"
     assert config.bitcoin_datadir == Path("/var/lib/bitcoin")
     assert config.bitcoin_rpc_host is None
     assert config.bitcoin_rpc_port is None

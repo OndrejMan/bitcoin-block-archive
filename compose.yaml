@@ -48,7 +48,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-https://s3.cl4.du.cesnet.cz}
-      S3_DESTINATION: ${S3_DESTINATION:-s3://xman-coinjoin/bitcoin-mainnet/blocks}
+      S3_DESTINATION: ${S3_DESTINATION:-s3://xman-coinjoin-new/bitcoin-mainnet/blocks}
       S3_PROFILE: ${S3_PROFILE:-coinjoin}
       BITCOIN_DATADIR: /bitcoin
       BITCOIN_RPC_HOST: bitcoin-core
