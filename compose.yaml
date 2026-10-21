@@ -62,6 +62,8 @@ services:
     volumes:
       - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
       - archive-state:/state
+      # Dumplings' progress, the prune ceiling of --prune-ceiling-file.
+      - ${DUMPLINGS_DATA_SOURCE:-dumplings-data}:/dumplings:ro
     # ARCHIVER_ARGS replaces the default flags after the fixed paths and is
     # split like a shell command line.
     command: >-
@@ -74,7 +76,35 @@ services:
     stop_grace_period: 10m
     restart: unless-stopped
 
+  # Daily Dumplings scan of the same node, published to S3 as one latest
+  # snapshot. On a pruned node it keeps the Whirlpool tx0s it needs itself,
+  # and the archiver needs --prune-ceiling-file so that it never prunes a
+  # block Dumplings has not scanned yet; see dumplings/README.md and
+  # scenario-lab/mainnet-analysis-plan-v2.md §2.10.
+  dumplings:
+    profiles: ["dumplings"]
+    image: ${DUMPLINGS_IMAGE:-ghcr.io/ondrejman/dumplings:latest}
+    user: "${BITCOIN_DATA_UID:-100}:${BITCOIN_DATA_GID:-101}"
+    # Dumplings only talks to Core on localhost:8332.
+    network_mode: service:bitcoin-core
+    depends_on:
+      bitcoin-core:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-https://s3.cl4.du.cesnet.cz}
+      DUMPLINGS_S3_DESTINATION: ${DUMPLINGS_S3_DESTINATION:-s3://xman-coinjoin-new/dumplings}
+      DUMPLINGS_INTERVAL: ${DUMPLINGS_INTERVAL:-86400}
+      BITCOIN_RPC_COOKIE: /bitcoin/.cookie
+    volumes:
+      - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
+      # Scanner/ grows to several GB; keep it off a nearly full block volume.
+      - ${DUMPLINGS_DATA_SOURCE:-dumplings-data}:/data
+    stop_grace_period: 2m
+    restart: unless-stopped
 
 volumes:
   bitcoin-data:
   archive-state:
+  dumplings-data:
