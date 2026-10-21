@@ -13,7 +13,12 @@ services:
       GID: ${BITCOIN_DATA_GID:-0}
     command:
       - -server=1
-      - -prune=1
+      # No pruning and a txindex by default, so a first Dumplings scan can check
+      # its tx0 candidate rule. Manual pruning by the archiver (1) needs
+      # BITCOIN_TXINDEX=0, because Core refuses txindex with any pruning.
+      - -prune=${BITCOIN_PRUNE:-0}
+      - -txindex=${BITCOIN_TXINDEX:-1}
+      - -rpcworkqueue=${BITCOIN_RPC_WORK_QUEUE:-16}
       - -dbcache=${BITCOIN_DBCACHE:-4096}
       - -blocksxor=0
       - -listen=0
@@ -62,13 +67,14 @@ services:
     # split like a shell command line.
     command: >-
       --block-dir /bitcoin/blocks --state-dir /state
-      ${ARCHIVER_ARGS:---keep-latest-files 2 --prune-after-archive}
+      ${ARCHIVER_ARGS:---keep-latest-files 2}
     # SIGTERM ends the wait at once and otherwise lets the running pass finish.
     # A pass still running after the grace period is killed; the next pass
     # repeats its unverified uploads.
     init: true
     stop_grace_period: 10m
     restart: unless-stopped
+
 
 volumes:
   bitcoin-data:

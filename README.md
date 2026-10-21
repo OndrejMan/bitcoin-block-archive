@@ -13,7 +13,7 @@ Archives completed Bitcoin Core `blk*.dat` files and their JSON metadata to S3-c
    docker compose logs -f archiver
    ```
 
-The default Compose configuration uses `prune=1` and prunes only after checking the archived files. To upload without pruning, remove `--prune-after-archive` from `ARCHIVER_ARGS` in `.env`.
+The default Compose configuration keeps every block with a txindex, and the archiver only uploads. To prune after checking the archived files, set `BITCOIN_PRUNE=1`, `BITCOIN_TXINDEX=0` and add `--prune-after-archive` to `ARCHIVER_ARGS` in `.env`; Core refuses a txindex with any pruning.
 
 With pruning enabled, the archiver releases eligible files after every 16
 verified files (about 2 GiB of normal Core block files), and after the final
