@@ -32,7 +32,8 @@ services:
       # BITCOIN_DATA_SOURCE=/mnt/bitcoin-data to use a mounted host disk.
       - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin
     healthcheck:
-      test: ["CMD-SHELL", "bitcoin-cli -datadir=/bitcoin getblockchaininfo >/dev/null"]
+      # uptime checks RPC readiness without taking the chainstate lock during IBD.
+      test: ["CMD-SHELL", "bitcoin-cli -datadir=/bitcoin -rpcclienttimeout=5 uptime >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 20
