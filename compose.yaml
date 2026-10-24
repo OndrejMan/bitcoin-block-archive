@@ -84,6 +84,8 @@ services:
   dumplings:
     profiles: ["dumplings"]
     image: ${DUMPLINGS_IMAGE:-ghcr.io/ondrejman/dumplings:latest}
+    mem_limit: ${DUMPLINGS_MEMORY_LIMIT:-2g}
+    memswap_limit: ${DUMPLINGS_MEMORY_LIMIT:-2g}
     user: "${BITCOIN_DATA_UID:-100}:${BITCOIN_DATA_GID:-101}"
     # Dumplings only talks to Core on localhost:8332.
     network_mode: service:bitcoin-core

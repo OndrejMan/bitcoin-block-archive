@@ -65,6 +65,7 @@ disk.
    DUMPLINGS_S3_DESTINATION=s3://xman-coinjoin-new/dumplings
    DUMPLINGS_INTERVAL=86400
    DUMPLINGS_DATA_SOURCE=dumplings-data
+   DUMPLINGS_MEMORY_LIMIT=2g
    ```
 
    The image already contains the CLI, scheduler and S3 publisher. If an
@@ -83,11 +84,11 @@ disk.
    No build or CI run in the archive repository is needed for a Dumplings update.
 
 5. Start only Dumplings. `--no-deps` leaves the running Core and archiver
-   alone. The memory cap makes the kernel kill Dumplings rather than
-   `bitcoind` when the VM runs out of memory:
+   alone. Compose applies `DUMPLINGS_MEMORY_LIMIT` (2 GiB by default) with no
+   swap, including after every container recreation:
 
    ```bash
-   docker compose --profile dumplings up -d --no-deps dumplings && docker update --memory 2g --memory-swap 2g "$(docker compose --profile dumplings ps -q dumplings)"
+   docker compose --profile dumplings up -d --no-deps dumplings
    ```
 
 6. Follow the log. The first pass prints `published hashes of heights …` and
@@ -108,8 +109,9 @@ docker compose --profile dumplings exec dumplings cat /data/Scanner/LastProcesse
 docker stats --no-stream
 ```
 
-If the log shows `Killed` followed by `sync failed`, Dumplings hit the memory
-cap. Raise it with the same `docker update` command, for example to `3g`.
+If the log shows `Killed` followed by `sync failed`, inspect the container's
+OOM status. If it hit the memory cap, raise `DUMPLINGS_MEMORY_LIMIT` in `.env`,
+for example to `3g`, and repeat step 5.
 
 ### Cautions
 
@@ -117,14 +119,12 @@ cap. Raise it with the same `docker update` command, for example to `3g`.
   deployment. If `compose.yaml` changed the `bitcoin-core` command, Compose
   recreates and restarts Core with the new flags.
 - Dumplings shares Core's network namespace. Whenever `bitcoin-core` is
-  recreated, recreate Dumplings too and set the memory cap again:
+  recreated, recreate Dumplings too:
 
   ```bash
   docker compose --profile dumplings up -d --no-deps --force-recreate dumplings
   ```
 
-- `docker update` limits apply to the current container only; every recreate
-  needs them again.
 - Switch the node to pruning only after the first scan, while
   `Scanner/Tx0CandidateMisses.txt` stays empty, and add `--prune-ceiling-file`
   as described in the main README.
@@ -135,7 +135,7 @@ Publish the updated service from the Dumplings repository, then repeat
 steps 4 and 5. With `DUMPLINGS_IMAGE=ghcr.io/ondrejman/dumplings:latest`, pulling
 fetches the newly published image. There is no second build in the archive.
 The scan resumes from `Scanner/Checkpoint.txt` in the `dumplings-data` volume.
-Step 5 reapplies the memory cap to the new container.
+Compose applies the memory cap to the new container.
 
 ### Rollback
 
