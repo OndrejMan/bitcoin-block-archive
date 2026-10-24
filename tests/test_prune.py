@@ -174,6 +174,41 @@ def test_nothing_archived_yet_prunes_nothing(
     assert node.pruned == []
 
 
+def test_ceiling_holds_back_blocks_the_consumer_has_not_scanned(
+    config: Config,
+    node: FakeNode,
+    tmp_path: Path,
+) -> None:
+    config.state_dir.mkdir(parents=True)
+    node.heights = make_chain(config, {"blk00000.dat": 100})
+    mark_first_file(config)
+    ceiling = tmp_path / "LastProcessedBlockHeight.txt"
+    ceiling.write_text("90000")
+
+    prune_archived_blocks(replace(config, prune_ceiling_file=ceiling), FakeClient())
+
+    assert node.pruned == [90_000]
+
+
+@pytest.mark.parametrize("content", [None, "", "not a height"])
+def test_unreadable_ceiling_prunes_nothing(
+    config: Config,
+    node: FakeNode,
+    tmp_path: Path,
+    content: str | None,
+) -> None:
+    config.state_dir.mkdir(parents=True)
+    node.heights = make_chain(config, {"blk00000.dat": 100})
+    mark_first_file(config)
+    ceiling = tmp_path / "LastProcessedBlockHeight.txt"
+    if content is not None:
+        ceiling.write_text(content)
+
+    prune_archived_blocks(replace(config, prune_ceiling_file=ceiling), FakeClient())
+
+    assert node.pruned == []
+
+
 def test_partial_batch_is_pruned_at_end_of_pass(
     config: Config,
     node: FakeNode,

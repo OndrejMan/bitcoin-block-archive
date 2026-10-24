@@ -8,6 +8,8 @@ until it is known to be in S3.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from bitcoin_block_archive.bitcoin import (
     block_height,
     chain_height,
@@ -72,6 +74,15 @@ def safe_prune_height(
     return min(min(heights) - 1, chain_height(config))
 
 
+def read_prune_ceiling(path: Path) -> int | None:
+    """Height in a consumer's progress file, or None when it cannot be read."""
+    try:
+        return int(path.read_text(encoding="ascii").strip())
+    except (OSError, ValueError) as error:
+        LOG.warning("Cannot read the prune ceiling from %s: %s", path, error)
+        return None
+
+
 def _verify_archived_local_files(config: Config, uploader: Uploader) -> None:
     """Verify remote copies of locally present files with valid markers."""
     for path in sorted(config.block_dir.glob("blk*.dat")):
@@ -96,6 +107,15 @@ def prune_archived_blocks(
     uploader = client if client is not None else S5cmdClient(config)
     _verify_archived_local_files(config, uploader)
     height = safe_prune_height(config, height_cache=height_cache)
+
+    if height is not None and config.prune_ceiling_file is not None:
+        ceiling = read_prune_ceiling(config.prune_ceiling_file)
+
+        if ceiling is None:
+            LOG.info("No prune ceiling; not pruning")
+            return
+
+        height = min(height, ceiling)
 
     if height is None:
         LOG.info("No safe prune height could be determined; not pruning")
