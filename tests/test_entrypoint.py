@@ -15,6 +15,7 @@ CREDENTIAL_VARIABLES = (
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
     "S3_PROFILE",
+    "S3_CREDENTIALS_FILE",
 )
 
 
@@ -45,7 +46,7 @@ def run_entrypoint(
         env={
             **base,
             "PATH": f"{fake_archiver}:{os.environ['PATH']}",
-            "S3_CREDENTIALS_FILE": str(tmp_path / "credentials"),
+            "TMPDIR": str(tmp_path),
             **environment,
         },
         capture_output=True,
@@ -61,14 +62,14 @@ def test_without_secrets_arguments_pass_through(
 
     assert result.returncode == 0
     assert result.stdout.splitlines() == ["--block-dir", "/bitcoin/blocks"]
-    assert not (tmp_path / "credentials").exists()
+    assert not (tmp_path / "bitcoin-block-archive-credentials").exists()
 
 
 @pytest.mark.parametrize("prefix", ["S3", "AWS"])
 def test_secrets_become_a_private_credentials_profile(
     fake_archiver: Path, tmp_path: Path, prefix: str
 ) -> None:
-    credentials = tmp_path / "credentials"
+    credentials = tmp_path / "bitcoin-block-archive-credentials"
     result = run_entrypoint(
         fake_archiver,
         tmp_path,
@@ -109,7 +110,7 @@ def test_s3_pair_takes_precedence_over_aws_pair(
     )
 
     assert result.returncode == 0
-    assert "s3-access" in (tmp_path / "credentials").read_text()
+    assert "s3-access" in (tmp_path / "bitcoin-block-archive-credentials").read_text()
 
 
 def test_half_a_key_pair_is_rejected(fake_archiver: Path, tmp_path: Path) -> None:
@@ -117,4 +118,53 @@ def test_half_a_key_pair_is_rejected(fake_archiver: Path, tmp_path: Path) -> Non
 
     assert result.returncode == 2
     assert "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY" in result.stderr
+    assert result.stdout == ""
+
+
+def test_mounted_file_takes_precedence_without_rewriting_it(
+    fake_archiver: Path, tmp_path: Path
+) -> None:
+    credentials = tmp_path / "mounted credentials"
+    content = "[archive]\naws_access_key_id=dummy\naws_secret_access_key=dummy\n"
+    credentials.write_text(content)
+    credentials.chmod(0o400)
+
+    result = run_entrypoint(
+        fake_archiver,
+        tmp_path,
+        "--state-dir",
+        "/state",
+        S3_CREDENTIALS_FILE=str(credentials),
+        S3_PROFILE="archive",
+        S3_ACCESS_KEY_ID="unused-access",
+        S3_SECRET_ACCESS_KEY="unused-secret",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "--credentials",
+        str(credentials),
+        "--profile",
+        "archive",
+        "--state-dir",
+        "/state",
+    ]
+    assert credentials.read_text() == content
+    assert stat.S_IMODE(credentials.stat().st_mode) == 0o400
+    assert not (tmp_path / "bitcoin-block-archive-credentials").exists()
+
+
+@pytest.mark.parametrize("directory", [False, True])
+def test_invalid_mounted_file_is_rejected(
+    fake_archiver: Path, tmp_path: Path, directory: bool
+) -> None:
+    credentials = tmp_path / "invalid"
+    if directory:
+        credentials.mkdir()
+    result = run_entrypoint(
+        fake_archiver, tmp_path, S3_CREDENTIALS_FILE=str(credentials)
+    )
+
+    assert result.returncode == 2
+    assert "readable regular file" in result.stderr
     assert result.stdout == ""

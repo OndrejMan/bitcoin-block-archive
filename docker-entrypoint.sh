@@ -4,8 +4,16 @@ set -eu
 # The archiver reads its other settings (S3_ENDPOINT_URL, S3_DESTINATION,
 # BITCOIN_RPC_HOST, ...) from the environment itself. Only the secrets need
 # this wrapper: s5cmd takes them from a credentials file, so convert common
-# container secrets into a short-lived one and callers never need to mount
-# ~/.aws into the image.
+# container secrets into a short-lived one, or use a read-only mounted file.
+profile="${S3_PROFILE:-coinjoin}"
+if [ -n "${S3_CREDENTIALS_FILE:-}" ]; then
+    if [ ! -f "$S3_CREDENTIALS_FILE" ] || [ ! -r "$S3_CREDENTIALS_FILE" ]; then
+        echo "S3_CREDENTIALS_FILE must name a readable regular file" >&2
+        exit 2
+    fi
+    exec bitcoin-block-archive --credentials "$S3_CREDENTIALS_FILE" --profile "$profile" "$@"
+fi
+
 access_key="${S3_ACCESS_KEY_ID:-}"
 secret_key="${S3_SECRET_ACCESS_KEY:-}"
 credentials_names="S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY"
@@ -14,8 +22,7 @@ if [ -z "${access_key}" ] && [ -z "${secret_key}" ]; then
     secret_key="${AWS_SECRET_ACCESS_KEY:-}"
     credentials_names="AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
 fi
-profile="${S3_PROFILE:-coinjoin}"
-credentials_file="${S3_CREDENTIALS_FILE:-/tmp/bitcoin-block-archive-credentials}"
+credentials_file="${TMPDIR:-/tmp}/bitcoin-block-archive-credentials"
 
 if [ -n "${access_key}" ] || [ -n "${secret_key}" ]; then
     if [ -z "${access_key}" ] || [ -z "${secret_key}" ]; then
