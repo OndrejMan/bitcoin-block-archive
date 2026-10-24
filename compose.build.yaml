@@ -1,0 +1,5 @@
+# Optional local builds: docker compose -f compose.yaml -f compose.build.yaml ...
+services:
+  archiver:
+    image: bitcoin-block-archive:local
+    build: .

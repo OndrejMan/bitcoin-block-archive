@@ -39,8 +39,7 @@ services:
 
   archiver:
     profiles: ["archive"]
-    build: .
-    image: bitcoin-block-archive:local
+    image: ${ARCHIVER_IMAGE:-ghcr.io/ondrejman/bitcoin-block-archive:latest}
     # Core's datadir is mode 700 and its cookie 600, so read them as their
     # owner: the Core image's `bitcoin` user (100:101) or BITCOIN_DATA_UID/GID.
     user: "${BITCOIN_DATA_UID:-100}:${BITCOIN_DATA_GID:-101}"

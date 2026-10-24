@@ -49,7 +49,7 @@ jobs:
         run: uv run python -m pytest
 
   validate-image:
-    name: Validate container image
+    name: Validate archiver image
     needs: quality
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
 
@@ -66,8 +66,8 @@ jobs:
           push: false
 
   publish-image:
-    name: Publish multi-architecture image
-    needs: quality
+    name: Publish multi-architecture archiver image
+    needs: [quality, validate-image]
     if: github.event_name != 'pull_request'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     permissions:

@@ -5,13 +5,27 @@ Archives completed Bitcoin Core `blk*.dat` files and their JSON metadata to S3-c
 ## Docker Compose
 
 1. Copy `.env.example` to `.env` and set the S3 credentials and destination. See `.env.example` for optional settings.
-2. Start Bitcoin Core and the archiver together. Compose waits for Core's RPC
+2. Pull the published images and start Bitcoin Core and the archiver together.
+   Compose waits for Core's RPC
    health check; do not wait for initial block download to finish:
 
    ```bash
+   docker compose --profile archive pull
    docker compose --profile archive up -d
    docker compose logs -f archiver
    ```
+
+GitHub Actions validates and publishes the archiver image
+`ghcr.io/ondrejman/bitcoin-block-archive` for Linux amd64/arm64 after successful
+checks on `main`, `v*` tags or a manual run. Tags include `latest`, `sha-*` and
+versions for version tags.
+
+For a local archiver build, opt into the build override:
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml --profile archive build archiver
+docker compose -f compose.yaml -f compose.build.yaml --profile archive up -d
+```
 
 The default Compose configuration keeps every block with a txindex, and the archiver only uploads. To prune after checking the archived files, set `BITCOIN_PRUNE=1`, `BITCOIN_TXINDEX=0` and add `--prune-after-archive` to `ARCHIVER_ARGS` in `.env`; Core refuses a txindex with any pruning.
 
