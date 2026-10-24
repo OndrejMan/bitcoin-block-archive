@@ -8,4 +8,5 @@ build/
 dist/
 *.egg-info/
 .env
+.core-backup.lock
 .idea/

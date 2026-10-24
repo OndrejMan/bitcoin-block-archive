@@ -37,7 +37,11 @@ RUN python3 -m venv /opt/bitcoin-block-archive-venv \
 
 # A fresh `archive-state` volume copies this mode, so whichever UID runs the
 # archiver can create its state there.
-RUN mkdir -m 1777 /state
+RUN mkdir -m 1777 /state /backup
+# Initialize a fresh named volume for restore without first starting Core.
+RUN mkdir -p /bitcoin \
+    && chown bitcoin:bitcoin /bitcoin \
+    && chmod 0700 /bitcoin
 
 ENV PATH="/opt/bitcoin-block-archive-venv/bin:${PATH}"
 

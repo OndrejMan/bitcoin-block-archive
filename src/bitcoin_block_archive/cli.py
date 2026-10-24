@@ -59,6 +59,7 @@ class Arguments(argparse.Namespace):
     upload_timeout: int
     verify_timeout: int
     interval: int
+    core_backup: str | None
 
 
 def _nonnegative_int(text: str) -> int:
@@ -106,6 +107,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
+    )
+
+    parser.add_argument(
+        "--core-backup",
+        choices=("check", "prepare", "create", "upload", "restore"),
+        help="Pruned Core snapshot step; use core-backup.sh to coordinate Compose.",
     )
 
     parser.add_argument(
@@ -299,6 +306,11 @@ def main(argv: list[str] | None = None) -> int:
     configure(verbose=args.verbose)
 
     config = config_from_args(args)
+
+    if args.core_backup is not None:
+        from bitcoin_block_archive.core_backup import main as backup_main
+
+        return backup_main(config, args.core_backup)
 
     succeeded = True
     with stop_on_signals() as stop, watch_disk(config, stop) as tripped:

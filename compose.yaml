@@ -40,7 +40,7 @@ services:
       start_period: 60s
     stop_grace_period: 5m
 
-  archiver:
+  archiver: &archiver-service
     profiles: ["archive"]
     image: ${ARCHIVER_IMAGE:-ghcr.io/ondrejman/bitcoin-block-archive:latest}
     # Core's datadir is mode 700 and its cookie 600, so read them as their
@@ -49,7 +49,7 @@ services:
     depends_on:
       bitcoin-core:
         condition: service_healthy
-    environment:
+    environment: &archiver-environment
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -64,17 +64,18 @@ services:
       # Seconds between passes, or 30m / 2h; 0 runs one pass and exits.
       ARCHIVE_INTERVAL: ${ARCHIVE_INTERVAL:-30m}
     volumes:
-      - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
-      - archive-state:/state
+      - &bitcoin-readonly ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin:ro
+      - &archive-state archive-state:/state
       # /dev/null keeps this optional when credentials come from environment.
-      - type: bind
+      - &s3-credentials
+        type: bind
         source: ${S3_CREDENTIALS_SOURCE:-/dev/null}
         target: /run/secrets/s3-credentials
         read_only: true
         bind:
           create_host_path: false
       # Dumplings' progress, the prune ceiling of --prune-ceiling-file.
-      - ${DUMPLINGS_DATA_SOURCE:-dumplings-data}:/dumplings:ro
+      - &dumplings-readonly ${DUMPLINGS_DATA_SOURCE:-dumplings-data}:/dumplings:ro
     # ARCHIVER_ARGS replaces the default flags after the fixed paths and is
     # split like a shell command line.
     command: >-
@@ -127,7 +128,41 @@ services:
     stop_grace_period: 2m
     restart: unless-stopped
 
+  # Host core-backup.sh coordinates shutdown; no Docker socket in a container.
+  core-backup: &core-backup-service
+    <<: *archiver-service
+    profiles: ["backup"]
+    restart: "no"
+    command: --block-dir /bitcoin/blocks --state-dir /state --core-backup check
+    environment:
+      <<: *archiver-environment
+      CORE_BACKUP_DESTINATION: ${CORE_BACKUP_DESTINATION:-s3://xman-coinjoin-new/bitcoin-mainnet/core-snapshots}
+      CORE_BACKUP_MAX_SIZE: ${CORE_BACKUP_MAX_SIZE:-25G}
+      CORE_BACKUP_MAX_BLOCK_SIZE: ${CORE_BACKUP_MAX_BLOCK_SIZE:-2G}
+      CORE_BACKUP_MAX_LAG: ${CORE_BACKUP_MAX_LAG:-2016}
+      CORE_BACKUP_PRUNE: ${BITCOIN_PRUNE:-0}
+      CORE_BACKUP_TXINDEX: ${BITCOIN_TXINDEX:-1}
+      CORE_BACKUP_ARCHIVER_ARGS: ${ARCHIVER_ARGS:---keep-latest-files 2}
+    volumes:
+      - *bitcoin-readonly
+      - *archive-state
+      - *s3-credentials
+      - *dumplings-readonly
+      - core-backup-staging:/backup
+
+  core-restore:
+    <<: *core-backup-service
+    profiles: ["backup"]
+    command: --block-dir /bitcoin/blocks --state-dir /state --core-backup restore
+    volumes:
+      - ${BITCOIN_DATA_SOURCE:-bitcoin-data}:/bitcoin
+      - *archive-state
+      - *s3-credentials
+      - *dumplings-readonly
+      - core-backup-staging:/backup
+
 volumes:
   bitcoin-data:
   archive-state:
   dumplings-data:
+  core-backup-staging:

@@ -123,3 +123,10 @@ pruning only while that file is empty. Deploying the service on a running node
 is described in [dumplings/README.md](dumplings/README.md).
 
 For standalone use, install with `uv sync` and run `uv run bitcoin-block-archive --help`.
+
+## Small Core snapshots
+
+`bash core-backup.sh` creates a bounded snapshot only after manual pruning has
+caught up. `bash core-backup.sh restore` restores it into an empty Core datadir.
+The defaults cap retained block/undo data at 2 GiB and each snapshot at 25 GiB.
+See [eligibility, backup, restore and validation](docs/core-snapshots.md).

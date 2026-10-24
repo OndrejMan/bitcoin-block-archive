@@ -2,6 +2,11 @@
 set -euo pipefail
 
 deploy_dir=${1:-"$HOME/bitcoin-block-archive"}
+prepare_only=${2:-}
+[[ -z "$prepare_only" || "$prepare_only" == --prepare-only ]] || {
+    echo 'Usage: deploy.sh [directory] [--prepare-only]' >&2
+    exit 2
+}
 source_url=https://raw.githubusercontent.com/OndrejMan/bitcoin-block-archive/main
 
 command -v curl >/dev/null
@@ -9,7 +14,8 @@ docker compose version >/dev/null
 mkdir -p -- "$deploy_dir"
 cd -- "$deploy_dir"
 temporary=$(mktemp .deploy.XXXXXX)
-trap 'rm -f -- "$temporary"' EXIT
+backup_script=$(mktemp .core-backup-deploy.XXXXXX)
+trap 'rm -f -- "$temporary" "$backup_script"' EXIT
 
 if [[ ! -e .env ]]; then
     curl -fsSL "$source_url/.env.example" -o "$temporary"
@@ -19,6 +25,8 @@ if [[ ! -e .env ]]; then
 fi
 
 curl -fsSL "$source_url/compose.yaml" -o "$temporary"
+curl -fsSL "$source_url/core-backup.sh" -o "$backup_script"
+bash -n "$backup_script"
 compose_file=$temporary
 compose() {
     docker compose --project-name bitcoin-block-archive --project-directory "$PWD" \
@@ -52,7 +60,13 @@ else
 fi
 compose pull
 mv -- "$temporary" compose.yaml
+mv -- "$backup_script" core-backup.sh
 compose_file=compose.yaml
+
+if [[ "$prepare_only" == --prepare-only ]]; then
+    echo 'Deployment prepared; services were not started. Set pruning flags, then run bash core-backup.sh restore.'
+    exit 0
+fi
 
 compose up -d --wait bitcoin-core
 compose up -d --no-deps --force-recreate archiver dumplings

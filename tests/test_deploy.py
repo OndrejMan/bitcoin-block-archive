@@ -208,3 +208,24 @@ def test_aws_environment_pair_is_supported(deployment: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert any("up" in call for call in docker_calls(deployment))
+
+
+def test_prepare_only_downloads_backup_script_without_starting_services(
+    deployment: Path,
+) -> None:
+    deployment.mkdir()
+    (deployment / ".env").write_text(
+        "S3_ACCESS_KEY_ID=dummy\nS3_SECRET_ACCESS_KEY=dummy\n"
+    )
+    result = subprocess.run(
+        ["bash", str(REPO / "deploy.sh"), str(deployment), "--prepare-only"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=3,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (deployment / "core-backup.sh").read_bytes() == (
+        REPO / "core-backup.sh"
+    ).read_bytes()
+    assert not any("up" in call for call in docker_calls(deployment))
