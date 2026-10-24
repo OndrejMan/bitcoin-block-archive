@@ -2,6 +2,34 @@
 
 Archives completed Bitcoin Core `blk*.dat` files and their JSON metadata to S3-compatible storage. With manual pruning enabled, it can prune files after verifying the upload.
 
+## Deploy on a VM without a Git clone
+
+Install Docker with Compose v2 and `curl`, then download and run the deployment
+script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OndrejMan/bitcoin-block-archive/main/deploy.sh -o /tmp/bitcoin-block-archive-deploy.sh &&
+bash /tmp/bitcoin-block-archive-deploy.sh
+```
+
+The default deployment directory is `~/bitcoin-block-archive`. On the first run
+the script creates a private `.env` there and stops. Edit that file to set your
+S3 credentials and destinations, and the data disk path/owner, then repeat the
+same command. Existing `.env` files are never overwritten. To use another
+directory, pass it as the script's first argument.
+
+After both repositories have successfully published their images, the script
+downloads `compose.yaml`, validates it and pulls the images before replacing
+the current Compose file. It starts Core, waits for its RPC health check and
+recreates the archiver and Dumplings containers. Core may restart if its
+configuration changed. Re-run the same download command for later updates;
+there is no local image build or Git checkout to update.
+
+The fixed Compose project name is `bitcoin-block-archive`, including in another
+deployment directory, so the existing named volumes remain in use. This is
+one deployment per Docker daemon. Dumplings has a persistent 2 GiB memory cap
+with no swap; change `DUMPLINGS_MEMORY_LIMIT` in `.env` if needed.
+
 ## Docker Compose
 
 1. Copy `.env.example` to `.env` and set the S3 credentials and destination. See `.env.example` for optional settings.

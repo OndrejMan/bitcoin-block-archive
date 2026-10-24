@@ -1,3 +1,5 @@
+name: bitcoin-block-archive
+
 # One persistent mainnet Bitcoin Core node plus an on-demand archive pass.
 # `archiver` shares only the read-only node datadir and speaks to bitcoind over
 # the private Compose network with Core's cookie authentication.
