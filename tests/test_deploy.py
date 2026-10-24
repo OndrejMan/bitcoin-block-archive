@@ -39,6 +39,8 @@ with Path(os.environ["DEPLOY_TEST_LOG"]).open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
 if os.environ.get("DEPLOY_TEST_FAILURE") in sys.argv[1:]:
     sys.exit(1)
+if "--environment" in sys.argv:
+    print(Path(sys.argv[sys.argv.index("--env-file") + 1]).read_text(), end="")
 """,
     }
     for name, body in commands.items():
@@ -83,7 +85,10 @@ def test_update_preserves_env_and_pulls_before_recreating_services(
     deployment: Path,
 ) -> None:
     deployment.mkdir()
-    env = "S3_ACCESS_KEY_ID=existing-key\nBITCOIN_DATA_SOURCE=/mnt/bitcoin-data\n"
+    env = (
+        "S3_ACCESS_KEY_ID=existing-key\nS3_SECRET_ACCESS_KEY=existing-secret\n"
+        "BITCOIN_DATA_SOURCE=/mnt/bitcoin-data\n"
+    )
     (deployment / ".env").write_text(env)
     (deployment / "compose.yaml").write_text("old deployment\n")
 
@@ -113,14 +118,42 @@ def test_failed_preparation_keeps_existing_files_and_services(
     failure: str,
 ) -> None:
     deployment.mkdir()
-    (deployment / ".env").write_text("existing credentials\n")
+    env = "S3_ACCESS_KEY_ID=existing-key\nS3_SECRET_ACCESS_KEY=existing-secret\n"
+    (deployment / ".env").write_text(env)
     (deployment / "compose.yaml").write_text("existing configuration\n")
     monkeypatch.setenv("DEPLOY_TEST_FAILURE", failure)
 
     result = run_deploy(deployment)
 
     assert result.returncode != 0
-    assert (deployment / ".env").read_text() == "existing credentials\n"
+    assert (deployment / ".env").read_text() == env
     assert (deployment / "compose.yaml").read_text() == "existing configuration\n"
     assert not any("up" in call for call in docker_calls(deployment))
     assert not list(deployment.glob(".deploy.*"))
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        "",
+        "S3_ACCESS_KEY_ID=private-access-value\n",
+        "S3_SECRET_ACCESS_KEY=private-secret-value\n",
+        "S3_ACCESS_KEY_ID=\nS3_SECRET_ACCESS_KEY=\nS3_PROFILE=coinjoin\n",
+    ],
+)
+def test_missing_s3_keys_stop_deployment_without_exposing_values(
+    deployment: Path, env: str
+) -> None:
+    deployment.mkdir()
+    (deployment / ".env").write_text(env)
+    (deployment / "compose.yaml").write_text("existing configuration\n")
+
+    result = run_deploy(deployment)
+
+    assert result.returncode != 0
+    assert ".env" in result.stderr
+    assert "private-access-value" not in result.stdout + result.stderr
+    assert "private-secret-value" not in result.stdout + result.stderr
+    assert (deployment / ".env").read_text() == env
+    assert (deployment / "compose.yaml").read_text() == "existing configuration\n"
+    assert not any("pull" in call or "up" in call for call in docker_calls(deployment))

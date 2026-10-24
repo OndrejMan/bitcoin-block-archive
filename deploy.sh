@@ -27,6 +27,18 @@ compose() {
 }
 
 compose config --quiet
+missing=$(compose config --environment | awk '
+    /^S3_ACCESS_KEY_ID=./ { access = 1 }
+    /^S3_SECRET_ACCESS_KEY=./ { secret = 1 }
+    END {
+        if (!access) print "S3_ACCESS_KEY_ID"
+        if (!secret) print "S3_SECRET_ACCESS_KEY"
+    }
+')
+if [[ -n "$missing" ]]; then
+    printf 'Fill in these values in %s/.env before deploying:\n%s\n' "$PWD" "$missing" >&2
+    exit 1
+fi
 compose pull
 mv -- "$temporary" compose.yaml
 compose_file=compose.yaml

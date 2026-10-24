@@ -15,7 +15,9 @@ bash /tmp/bitcoin-block-archive-deploy.sh
 The default deployment directory is `~/bitcoin-block-archive`. On the first run
 the script creates a private `.env` there and stops. Edit that file to set your
 S3 credentials and destinations, and the data disk path/owner, then repeat the
-same command. Existing `.env` files are never overwritten. To use another
+same command. Deployment stops before pulling or starting services if either
+S3 key is empty; `S3_PROFILE` alone does not supply credentials to the containers.
+Existing `.env` files are never overwritten. To use another
 directory, pass it as the script's first argument.
 
 After both repositories have successfully published their images, the script
