@@ -55,6 +55,13 @@ def test_defaults_map_into_config() -> None:
     assert config.min_free_space == 20 * 1024**3
 
 
+def test_prune_ceiling_file_maps_into_config() -> None:
+    assert parse([]).prune_ceiling_file is None
+    assert parse(
+        ["--prune-ceiling-file", "/dumplings/height.txt"]
+    ).prune_ceiling_file == Path("/dumplings/height.txt")
+
+
 def test_environment_supplies_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("S3_ENDPOINT_URL", "https://s3.example.invalid")
     monkeypatch.setenv("S3_PROFILE", "archive")

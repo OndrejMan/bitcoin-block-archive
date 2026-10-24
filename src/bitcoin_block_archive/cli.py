@@ -52,6 +52,7 @@ class Arguments(argparse.Namespace):
     rpc_host: str | None
     rpc_port: int | None
     prune_after_archive: bool
+    prune_ceiling_file: Path | None
     min_free_space: int
     verbose: bool
     rpc_timeout: int
@@ -193,6 +194,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--prune-ceiling-file",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Never prune above the height written in PATH, such as Dumplings' "
+            "Scanner/LastProcessedBlockHeight.txt, so blocks stay until it has "
+            "scanned them. A missing or unreadable file stops pruning."
+        ),
+    )
+
+    parser.add_argument(
         "--min-free-space",
         type=_size_argument,
         default=DEFAULT_MIN_FREE_SPACE,
@@ -251,6 +263,7 @@ def config_from_args(args: Arguments) -> Config:
         s3_destination=args.destination,
         keep_latest_files=args.keep_latest_files,
         prune_after_archive=args.prune_after_archive,
+        prune_ceiling_file=args.prune_ceiling_file,
         min_free_space=args.min_free_space,
         bitcoin_cli=args.bitcoin_cli,
         bitcoin_datadir=args.bitcoin_datadir,

@@ -46,6 +46,9 @@ class Config:
     bitcoin_datadir: Path
     bitcoin_rpc_host: str | None = None
     bitcoin_rpc_port: int | None = None
+    # Highest height a consumer of the local blocks has processed (Dumplings'
+    # LastProcessedBlockHeight.txt); pruning never goes above it.
+    prune_ceiling_file: Path | None = None
 
     rpc_timeout: int = DEFAULT_RPC_TIMEOUT
     upload_timeout: int = DEFAULT_UPLOAD_TIMEOUT
