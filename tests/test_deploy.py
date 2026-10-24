@@ -157,3 +157,54 @@ def test_missing_s3_keys_stop_deployment_without_exposing_values(
     assert (deployment / ".env").read_text() == env
     assert (deployment / "compose.yaml").read_text() == "existing configuration\n"
     assert not any("pull" in call or "up" in call for call in docker_calls(deployment))
+
+
+def test_credentials_file_deployment_needs_no_keys_in_environment(
+    deployment: Path,
+) -> None:
+    deployment.mkdir()
+    credentials = deployment / "mounted credentials"
+    content = "[coinjoin]\naws_access_key_id=dummy\naws_secret_access_key=dummy\n"
+    credentials.write_text(content)
+    credentials.chmod(0o400)
+    env = f"S3_CREDENTIALS_SOURCE={credentials}\nS3_PROFILE=coinjoin\n"
+    (deployment / ".env").write_text(env)
+
+    result = run_deploy(deployment)
+
+    assert result.returncode == 0, result.stderr
+    assert credentials.read_text() == content
+    assert (deployment / ".env").read_text() == env
+    assert content not in result.stdout + result.stderr
+    assert any("up" in call for call in docker_calls(deployment))
+
+
+@pytest.mark.parametrize("directory", [False, True])
+def test_invalid_credentials_source_stops_before_pull(
+    deployment: Path, directory: bool
+) -> None:
+    deployment.mkdir()
+    credentials = deployment / "invalid"
+    if directory:
+        credentials.mkdir()
+    (deployment / ".env").write_text(f"S3_CREDENTIALS_SOURCE={credentials}\n")
+    (deployment / "compose.yaml").write_text("existing configuration\n")
+
+    result = run_deploy(deployment)
+
+    assert result.returncode != 0
+    assert "readable regular file" in result.stderr
+    assert (deployment / "compose.yaml").read_text() == "existing configuration\n"
+    assert not any("pull" in call or "up" in call for call in docker_calls(deployment))
+
+
+def test_aws_environment_pair_is_supported(deployment: Path) -> None:
+    deployment.mkdir()
+    (deployment / ".env").write_text(
+        "AWS_ACCESS_KEY_ID=dummy-access\nAWS_SECRET_ACCESS_KEY=dummy-secret\n"
+    )
+
+    result = run_deploy(deployment)
+
+    assert result.returncode == 0, result.stderr
+    assert any("up" in call for call in docker_calls(deployment))

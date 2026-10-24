@@ -15,8 +15,9 @@ bash /tmp/bitcoin-block-archive-deploy.sh
 The default deployment directory is `~/bitcoin-block-archive`. On the first run
 the script creates a private `.env` there and stops. Edit that file to set your
 S3 credentials and destinations, and the data disk path/owner, then repeat the
-same command. Deployment stops before pulling or starting services if either
-S3 key is empty; `S3_PROFILE` alone does not supply credentials to the containers.
+same command. Deployment accepts a readable credentials file or a complete
+pair of S3/AWS keys. Missing credentials stop deployment before pulling or
+starting services; `S3_PROFILE` alone does not supply credentials.
 Existing `.env` files are never overwritten. To use another
 directory, pass it as the script's first argument.
 
@@ -44,6 +45,27 @@ with no swap; change `DUMPLINGS_MEMORY_LIMIT` in `.env` if needed.
    docker compose --profile archive up -d
    docker compose logs -f archiver
    ```
+
+For an existing credentials file on the VM, set these values in `.env`:
+
+```dotenv
+S3_CREDENTIALS_SOURCE=/home/ubuntu/.aws/credentials
+S3_PROFILE=coinjoin
+```
+
+Compose mounts that file read-only at `/run/secrets/s3-credentials` in both the
+archiver and Dumplings containers. Both select the requested profile without
+copying or rewriting the file. The file takes precedence over environment keys.
+Keep it private (mode `600`); its owner must match the container UID, such as
+`BITCOIN_DATA_UID=1000` for a file owned by `ubuntu` with UID 1000. The deploy
+script checks host readability, and each entrypoint checks readability again
+as its container user. This does not verify that the selected profile exists
+or that its keys have S3 access.
+
+Alternatively leave `S3_CREDENTIALS_SOURCE` empty and supply both
+`S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` (or both `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`). File mode needs newly published images from both
+repositories. Changing `.env` requires recreating the two service containers.
 
 GitHub Actions validates and publishes the archiver image
 `ghcr.io/ondrejman/bitcoin-block-archive` for Linux amd64/arm64 after successful

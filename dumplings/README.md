@@ -68,6 +68,13 @@ disk.
    DUMPLINGS_MEMORY_LIMIT=2g
    ```
 
+   For a host credentials file, also set
+   `S3_CREDENTIALS_SOURCE=/home/ubuntu/.aws/credentials` and `S3_PROFILE=coinjoin`.
+   Compose mounts it read-only into both services. A mode-600 file must be
+   owned by the container's UID (`BITCOIN_DATA_UID`, typically 1000 on this VM).
+   Environment key pairs are also supported when no file is selected; see
+   the main README.
+
    The image already contains the CLI, scheduler and S3 publisher. If an
    existing `.env` points to `bitcoin-block-archive-dumplings`, replace that
    value with the image above. A `sha-*` tag can also select an older release.

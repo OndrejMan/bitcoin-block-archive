@@ -27,17 +27,28 @@ compose() {
 }
 
 compose config --quiet
-missing=$(compose config --environment | awk '
-    /^S3_ACCESS_KEY_ID=./ { access = 1 }
-    /^S3_SECRET_ACCESS_KEY=./ { secret = 1 }
-    END {
-        if (!access) print "S3_ACCESS_KEY_ID"
-        if (!secret) print "S3_SECRET_ACCESS_KEY"
-    }
-')
-if [[ -n "$missing" ]]; then
-    printf 'Fill in these values in %s/.env before deploying:\n%s\n' "$PWD" "$missing" >&2
-    exit 1
+credentials_source=$(compose config --environment | sed -n 's/^S3_CREDENTIALS_SOURCE=//p')
+if [[ -n "$credentials_source" ]]; then
+    if [[ ! -f "$credentials_source" || ! -r "$credentials_source" ]]; then
+        printf 'S3_CREDENTIALS_SOURCE in %s/.env must name a readable regular file.\n' "$PWD" >&2
+        exit 1
+    fi
+else
+    missing=$(compose config --environment | awk '
+        /^S3_ACCESS_KEY_ID=./ { access = 1 }
+        /^S3_SECRET_ACCESS_KEY=./ { secret = 1 }
+        /^AWS_ACCESS_KEY_ID=./ { aws_access = 1 }
+        /^AWS_SECRET_ACCESS_KEY=./ { aws_secret = 1 }
+        END {
+            if (!access && !secret && aws_access && aws_secret) exit
+            if (!access) print "S3_ACCESS_KEY_ID"
+            if (!secret) print "S3_SECRET_ACCESS_KEY"
+        }
+    ')
+    if [[ -n "$missing" ]]; then
+        printf 'Set S3_CREDENTIALS_SOURCE or fill in these values in %s/.env:\n%s\n' "$PWD" "$missing" >&2
+        exit 1
+    fi
 fi
 compose pull
 mv -- "$temporary" compose.yaml
