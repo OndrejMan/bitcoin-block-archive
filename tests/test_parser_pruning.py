@@ -5,13 +5,16 @@ from dataclasses import replace
 import pytest
 
 from bitcoin_block_archive import bitcoin, cli, prune
+from bitcoin_block_archive.blockfile import block_hash
+from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from tests.conftest import FakeClient, fake_header, write_block_file
-from bitcoin_block_archive.blockfile import block_hash
 
 
-def test_rpc_timeout_does_not_request_core_shutdown(config, monkeypatch):
-    def timeout(*args, **kwargs):
+def test_rpc_timeout_does_not_request_core_shutdown(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timeout(*args: object, **kwargs: object) -> None:
         raise ArchiveError("RPC timed out")
 
     monkeypatch.setattr(bitcoin, "_rpc_json", timeout)
@@ -31,7 +34,9 @@ def test_rpc_timeout_does_not_request_core_shutdown(config, monkeypatch):
     assert not cli.run_pass(config)
 
 
-def test_retains_cursor_and_newer_files_with_out_of_order_heights(config, monkeypatch):
+def test_retains_cursor_and_newer_files_with_out_of_order_heights(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = replace(config, prune_retain_from_file=1)
     known = {}
     # Newer file contains an older block: retaining only file 1's height is unsafe.
@@ -53,7 +58,9 @@ def test_retains_cursor_and_newer_files_with_out_of_order_heights(config, monkey
 
 
 @pytest.mark.parametrize("missing", [True, False])
-def test_unknown_resume_boundary_never_prunes(config, monkeypatch, missing):
+def test_unknown_resume_boundary_never_prunes(
+    config: Config, monkeypatch: pytest.MonkeyPatch, missing: bool
+) -> None:
     config = replace(config, prune_retain_from_file=3)
     if not missing:
         (config.block_dir / "blk00003.dat").write_bytes(bytes(128))
@@ -70,7 +77,9 @@ def test_unknown_resume_boundary_never_prunes(config, monkeypatch, missing):
         prune.prune_archived_blocks(config, FakeClient(), strict=True)
 
 
-def test_prune_only_does_not_run_archive(config, monkeypatch):
+def test_prune_only_does_not_run_archive(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         cli,
         "archive",
@@ -97,7 +106,7 @@ def test_prune_only_does_not_run_archive(config, monkeypatch):
     assert calls[0].prune_retain_from_file == 7
 
 
-def test_prune_only_requires_both_consumer_limits():
+def test_prune_only_requires_both_consumer_limits() -> None:
     with pytest.raises(SystemExit) as raised:
         cli.main(["--prune-only"])
     assert raised.value.code == 2

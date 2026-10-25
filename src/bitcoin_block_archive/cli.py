@@ -327,10 +327,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         if config.prune_ceiling_file is None or config.prune_retain_from_file is None:
             build_parser().error(
-                "--prune-only requires --prune-ceiling-file and --prune-retain-from-file"
+                "--prune-only requires --prune-ceiling-file "
+                "and --prune-retain-from-file"
             )
-        from bitcoin_block_archive.prune import prune_archived_blocks
         from bitcoin_block_archive.locking import exclusive_lock
+        from bitcoin_block_archive.prune import prune_archived_blocks
 
         try:
             config.state_dir.mkdir(parents=True, exist_ok=True)
