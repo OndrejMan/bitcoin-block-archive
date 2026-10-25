@@ -18,6 +18,7 @@ from bitcoin_block_archive.bitcoin import (
 )
 from bitcoin_block_archive.blockfile import first_block_hash
 from bitcoin_block_archive.config import Config
+from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.logging_setup import LOG
 from bitcoin_block_archive.s3 import S5cmdClient, Uploader
 from bitcoin_block_archive.state import (
@@ -102,22 +103,49 @@ def prune_archived_blocks(
     client: Uploader | None = None,
     *,
     height_cache: dict[str, int] | None = None,
+    strict: bool = False,
 ) -> None:
     require_safe_pruning(config, archiver_prunes=True)
     uploader = client if client is not None else S5cmdClient(config)
     _verify_archived_local_files(config, uploader)
     height = safe_prune_height(config, height_cache=height_cache)
 
+    boundary = config.prune_retain_from_file
+    if height is not None and boundary is not None:
+        resume_file = config.block_dir / f"blk{boundary:05d}.dat"
+        if not resume_file.is_file():
+            if strict:
+                raise ArchiveError(f"Parser resume file {resume_file} is missing")
+            LOG.warning("Parser resume file %s is missing; not pruning", resume_file)
+            return
+        # Core prunes by the highest height in each file, not by file number.
+        # A height below one known block in EVERY protected file preserves all
+        # those files even when arrival order differs from chain height.
+        for path in sorted(config.block_dir.glob("blk*.dat")):
+            if int(path.stem[3:]) < boundary:
+                continue
+            block = first_block_hash(path)
+            if block is None:
+                if strict:
+                    raise ArchiveError(f"Cannot bound protected parser file {path}")
+                LOG.warning("Cannot bound protected file %s; not pruning", path)
+                return
+            height = min(height, block_height(config, block) - 1)
+
     if height is not None and config.prune_ceiling_file is not None:
         ceiling = read_prune_ceiling(config.prune_ceiling_file)
 
         if ceiling is None:
+            if strict:
+                raise ArchiveError("Cannot read the consumer pruning ceiling")
             LOG.info("No prune ceiling; not pruning")
             return
 
         height = min(height, ceiling)
 
     if height is None:
+        if strict:
+            raise ArchiveError("Cannot determine a safe pruning height")
         LOG.info("No safe prune height could be determined; not pruning")
         return
 
