@@ -49,12 +49,16 @@ class Config:
     # Highest height a consumer of the local blocks has processed (Dumplings'
     # LastProcessedBlockHeight.txt); pruning never goes above it.
     prune_ceiling_file: Path | None = None
+    # Preserve this parser resume file and every newer blk/rev pair.
+    prune_retain_from_file: int | None = None
 
     rpc_timeout: int = DEFAULT_RPC_TIMEOUT
     upload_timeout: int = DEFAULT_UPLOAD_TIMEOUT
     verify_timeout: int = DEFAULT_VERIFY_TIMEOUT
 
     def __post_init__(self) -> None:
+        if self.prune_retain_from_file is not None and self.prune_retain_from_file < 0:
+            raise ValueError("prune_retain_from_file must not be negative")
         if self.keep_latest_files < 0:
             raise ValueError("keep_latest_files must not be negative")
         if self.min_free_space < 0:

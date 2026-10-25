@@ -52,6 +52,8 @@ class Arguments(argparse.Namespace):
     rpc_host: str | None
     rpc_port: int | None
     prune_after_archive: bool
+    prune_only: bool
+    prune_retain_from_file: int | None
     prune_ceiling_file: Path | None
     min_free_space: int
     verbose: bool
@@ -199,6 +201,16 @@ def build_parser() -> argparse.ArgumentParser:
             "Requires prune=1 (manual pruning) in bitcoin.conf."
         ),
     )
+    parser.add_argument(
+        "--prune-only",
+        action="store_true",
+        help="Verify existing archives and prune; never upload.",
+    )
+    parser.add_argument(
+        "--prune-retain-from-file",
+        type=_nonnegative_int,
+        help="Preserve this blk file number and all newer files.",
+    )
 
     parser.add_argument(
         "--prune-ceiling-file",
@@ -271,6 +283,7 @@ def config_from_args(args: Arguments) -> Config:
         keep_latest_files=args.keep_latest_files,
         prune_after_archive=args.prune_after_archive,
         prune_ceiling_file=args.prune_ceiling_file,
+        prune_retain_from_file=args.prune_retain_from_file,
         min_free_space=args.min_free_space,
         bitcoin_cli=args.bitcoin_cli,
         bitcoin_datadir=args.bitcoin_datadir,
@@ -306,6 +319,29 @@ def main(argv: list[str] | None = None) -> int:
     configure(verbose=args.verbose)
 
     config = config_from_args(args)
+
+    if args.prune_only:
+        if args.prune_after_archive or args.interval or args.core_backup is not None:
+            build_parser().error(
+                "--prune-only cannot be combined with uploads, intervals or core backup"
+            )
+        if config.prune_ceiling_file is None or config.prune_retain_from_file is None:
+            build_parser().error(
+                "--prune-only requires --prune-ceiling-file and --prune-retain-from-file"
+            )
+        from bitcoin_block_archive.prune import prune_archived_blocks
+        from bitcoin_block_archive.locking import exclusive_lock
+
+        try:
+            config.state_dir.mkdir(parents=True, exist_ok=True)
+            with exclusive_lock(config.lock_path) as acquired:
+                if not acquired:
+                    raise ArchiveError("Another archive/prune pass holds the lock")
+                prune_archived_blocks(config, strict=True)
+        except Exception:
+            LOG.exception("Prune-only pass failed")
+            return 1
+        return 0
 
     if args.core_backup is not None:
         from bitcoin_block_archive.core_backup import main as backup_main
