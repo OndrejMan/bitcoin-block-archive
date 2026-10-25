@@ -78,7 +78,11 @@ def require_safe_pruning(config: Config, *, archiver_prunes: bool) -> None:
     try:
         info = _rpc_json(config, "getblockchaininfo")
     except (ArchiveError, OSError) as error:
-        raise UnsafePruningError("Cannot verify Bitcoin Core pruning mode") from error
+        # An unavailable RPC says nothing about the configured pruning mode.
+        # Fail this pass without interrupting Core's startup/index verification.
+        raise ArchiveError(
+            "Cannot verify Bitcoin Core pruning mode; retry later"
+        ) from error
     pruned = info.get("pruned")
 
     if pruned is False:
