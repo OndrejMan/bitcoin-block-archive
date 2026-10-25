@@ -147,15 +147,15 @@ def test_failed_pass_leaves_bitcoin_running(
         ('{"pruned": true, "automatic_pruning": true}', True, True, False),
         ('{"pruned": true}', False, True, False),
         ("{}", False, True, False),
-        ("not JSON", False, True, False),
-        (ArchiveError("RPC timeout"), False, True, False),
-        (FileNotFoundError("bitcoin-cli"), False, True, False),
+        ("not JSON", False, False, False),
+        (ArchiveError("RPC timeout"), False, False, False),
+        (FileNotFoundError("bitcoin-cli"), False, False, False),
         ('{"pruned": true, "automatic_pruning": false}', True, False, True),
         ('{"pruned": false}', False, False, True),
         ('{"pruned": false}', True, False, False),
     ],
 )
-def test_failed_pass_stops_only_an_unsafe_or_unverified_node(
+def test_failed_pass_stops_only_a_node_with_unsafe_pruning(
     config: Config,
     monkeypatch: pytest.MonkeyPatch,
     response: str | Exception,

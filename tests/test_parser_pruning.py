@@ -4,11 +4,34 @@ from dataclasses import replace
 
 import pytest
 
-from bitcoin_block_archive import cli, prune
+from bitcoin_block_archive import bitcoin, cli, prune
 from bitcoin_block_archive.blockfile import block_hash
 from bitcoin_block_archive.config import Config
-from bitcoin_block_archive.errors import ArchiveError
+from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from tests.conftest import FakeClient, fake_header, write_block_file
+
+
+def test_rpc_timeout_does_not_request_core_shutdown(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timeout(*args: object, **kwargs: object) -> None:
+        raise ArchiveError("RPC timed out")
+
+    monkeypatch.setattr(bitcoin, "_rpc_json", timeout)
+    with pytest.raises(ArchiveError) as raised:
+        bitcoin.require_safe_pruning(config, archiver_prunes=False)
+    assert not isinstance(raised.value, UnsafePruningError)
+    monkeypatch.setattr(
+        cli,
+        "archive",
+        lambda *args, **kwargs: bitcoin.require_safe_pruning(
+            config, archiver_prunes=False
+        ),
+    )
+    monkeypatch.setattr(
+        cli, "stop_bitcoin", lambda *_: pytest.fail("timeout must not stop Core")
+    )
+    assert not cli.run_pass(config)
 
 
 def test_retains_cursor_and_newer_files_with_out_of_order_heights(
