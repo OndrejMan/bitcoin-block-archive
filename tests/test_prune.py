@@ -409,7 +409,7 @@ def test_s3_upload_verification_and_recheck_before_pruning(
         if "cp" in command:
             objects[destination] = Path(command[-2]).read_bytes()
             return subprocess.CompletedProcess(command, 0, "", "")
-        if "head" in command:
+        if "ls" in command:
             data = json.dumps({"key": destination, "size": len(objects[destination])})
             return subprocess.CompletedProcess(command, 0, data, "")
         assert command[-2] == "cat"

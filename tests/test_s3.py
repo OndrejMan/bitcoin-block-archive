@@ -51,7 +51,8 @@ def test_upload_raises_on_failure(
         None,
         "missing",
         "size",
-        "head_json",
+        "listing_json",
+        "only_sidecar",
         "metadata_missing",
         "metadata",
         "metadata_json",
@@ -84,12 +85,16 @@ def test_remote_verification(
     ) -> subprocess.CompletedProcess[str]:
         assert timeout == 12
         commands.append(command)
-        if "head" in command:
-            payload = json.dumps({"key": url, "size": 43 if failure == "size" else 42})
+        if "ls" in command:
+            # s5cmd lists every object under the key as a prefix, sidecar included.
+            block = {"key": url, "size": 43 if failure == "size" else 42}
+            sidecar = {"key": f"{url}.json", "size": 42}
+            lines = [sidecar] if failure == "only_sidecar" else [block, sidecar]
+            payload = "\n".join(json.dumps(line) for line in lines) + "\n"
             return subprocess.CompletedProcess(
                 command,
                 1 if failure == "missing" else 0,
-                "invalid JSON" if failure == "head_json" else payload,
+                "invalid JSON" if failure == "listing_json" else payload,
                 "not found",
             )
         assert command[-2:] == ["cat", f"{url}.json"]
@@ -118,7 +123,7 @@ def test_remote_verification(
     if failure is None:
         client.verify(url, metadata)
         assert len(commands) == 2
-        assert commands[0][-3:] == ["--json", "head", url]
+        assert commands[0][-3:] == ["--json", "ls", url]
     else:
         with pytest.raises(ArchiveError):
             client.verify(url, metadata)

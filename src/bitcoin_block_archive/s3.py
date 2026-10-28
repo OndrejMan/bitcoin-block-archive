@@ -80,15 +80,17 @@ class S5cmdClient:
         )
 
     def _verify_object_metadata(self, destination: str, size: int) -> None:
-        result = self._run_verify_command("--json", "head", destination)
+        result = self._run_verify_command("--json", "ls", destination)
         if result.returncode != 0:
             raise ArchiveError(f"Cannot verify {destination}: {result.stderr.strip()}")
-        remote = load_object(result.stdout, f"S3 metadata for {destination}")
-        if (
-            remote.get("key") != destination
-            or type(remote.get("size")) is not int
-            or remote["size"] != size
-        ):
+        # `ls` matches a prefix: the block's own .json sidecar is listed beside it.
+        listed = [
+            load_object(line, f"S3 metadata for {destination}")
+            for line in result.stdout.splitlines()
+            if line.strip()
+        ]
+        remote = next((item for item in listed if item.get("key") == destination), {})
+        if type(remote.get("size")) is not int or remote["size"] != size:
             raise ArchiveError(f"Remote size/key mismatch for {destination}")
 
     def _verify_metadata_sidecar(
