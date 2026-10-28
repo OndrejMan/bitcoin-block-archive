@@ -29,11 +29,7 @@ from bitcoin_block_archive.config import (
 from bitcoin_block_archive.disk import parse_size
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.logging_setup import LOG, configure
-from bitcoin_block_archive.schedule import (
-    parse_duration,
-    run_repeatedly,
-    stop_on_signals,
-)
+from bitcoin_block_archive.signals import stop_on_signals
 from bitcoin_block_archive.watchdog import watch_disk
 
 
@@ -60,7 +56,6 @@ class Arguments(argparse.Namespace):
     rpc_timeout: int
     upload_timeout: int
     verify_timeout: int
-    interval: int
 
 
 def _nonnegative_int(text: str) -> int:
@@ -86,13 +81,6 @@ def _size_argument(text: str) -> int:
     try:
         return parse_size(text)
     except (ArchiveError, OverflowError) as error:
-        raise argparse.ArgumentTypeError(str(error)) from error
-
-
-def _duration_argument(text: str) -> int:
-    try:
-        return parse_duration(text)
-    except ArchiveError as error:
         raise argparse.ArgumentTypeError(str(error)) from error
 
 
@@ -229,17 +217,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--interval",
-        type=_duration_argument,
-        default=_env("ARCHIVE_INTERVAL") or "0",
-        metavar="DURATION",
-        help=(
-            "Repeat the pass every DURATION (e.g. 30m) until SIGTERM or "
-            "SIGINT; 0 runs a single pass (env: ARCHIVE_INTERVAL)."
-        ),
-    )
-
-    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -314,10 +291,8 @@ def main(argv: list[str] | None = None) -> int:
     config = config_from_args(args)
 
     if args.prune_only:
-        if args.prune_after_archive or args.interval:
-            build_parser().error(
-                "--prune-only cannot be combined with uploads or intervals"
-            )
+        if args.prune_after_archive:
+            build_parser().error("--prune-only cannot be combined with uploads")
         if config.prune_ceiling_file is None or config.prune_retain_from_file is None:
             build_parser().error(
                 "--prune-only requires --prune-ceiling-file "
@@ -340,9 +315,6 @@ def main(argv: list[str] | None = None) -> int:
     succeeded = True
     with stop_on_signals() as stop, watch_disk(config, stop) as tripped:
         if not stop.is_set():
-            if args.interval == 0:
-                succeeded = run_pass(config, tripped)
-            else:
-                run_repeatedly(lambda: run_pass(config, tripped), args.interval, stop)
+            succeeded = run_pass(config, tripped)
 
     return 0 if succeeded and not tripped.is_set() else 1

@@ -2,22 +2,34 @@
 
 Archives completed Bitcoin Core `blk*.dat` files and their JSON metadata to S3-compatible storage. With manual pruning enabled, it can prune files after verifying the upload.
 
-## Docker Compose
+## Use in mainnet-sync
 
-1. Copy `.env.example` to `.env` and set the S3 credentials and destination. See `.env.example` for optional settings.
-2. Start Bitcoin Core and the archiver together. Compose waits for Core's RPC
-   health check; do not wait for initial block download to finish:
+The published image `ghcr.io/ondrejman/bitcoin-block-archive` contains Bitcoin
+Core and this archiver. coinjoin-pipeline's manually started `mainnet-sync` runs
+it on MetaCentrum PBS nodes through Apptainer: `bitcoind` for the node, one
+archive pass after Dumplings has scanned the frozen height, and a `--prune-only`
+pass with `--prune-ceiling-file` and `--prune-retain-from-file` after BlockSci
+has indexed it. Every pass is a single run; there is no scheduler or long-lived
+service. The block files land incrementally under the S3 prefix given by
+`--destination`, one object and its sidecar per completed file.
 
-   ```bash
-   docker compose --profile archive up -d
-   docker compose logs -f archiver
-   ```
+GitHub Actions validates and publishes the image for Linux amd64/arm64 after
+successful checks on `main`, `v*` tags or a manual run. Tags include `latest`,
+`sha-*` and versions for version tags.
 
-The default Compose configuration uses `prune=1` and prunes only after checking the archived files. To upload without pruning, remove `--prune-after-archive` from `ARCHIVER_ARGS` in `.env`.
+## Pruning
 
-With pruning enabled, the archiver releases eligible files after every 16
-verified files (about 2 GiB of normal Core block files), and after the final
-partial batch. Unarchived files remain protected even if a later upload fails.
-Core may retain additional files near its active tip or during synchronization.
+To prune after checking the archived files, pass `--prune-after-archive` to an
+archive pass or run a separate `--prune-only` pass; Core needs `prune=1`
+(manual pruning) and refuses a txindex with any pruning. Unarchived files remain
+protected even if a later upload fails. Core may retain additional files near
+its active tip or during synchronization.
+
+`--prune-ceiling-file` names a file holding a height, such as Dumplings'
+`Scanner/LastProcessedBlockHeight.txt`. Pruning never goes above it and stops
+while the file is missing, so every block is scanned before it is deleted.
+
+`--min-free-space` (default 20G) stops Bitcoin Core when free space in the block
+directory falls below it, checked every 30 seconds even during uploads.
 
 For standalone use, install with `uv sync` and run `uv run bitcoin-block-archive --help`.

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from bitcoin_block_archive import archive as archive_module
-from bitcoin_block_archive import cli, schedule, watchdog
+from bitcoin_block_archive import cli, watchdog
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError
 from bitcoin_block_archive.state import already_archived
@@ -57,7 +57,6 @@ def test_disk_guard_stops_core_while_upload_is_blocked_and_skips_next_file(
         archive_module.archive(config, client, cancelled=cancelled)
 
     monkeypatch.setattr(cli, "archive", upload)
-    monkeypatch.delenv("ARCHIVE_INTERVAL", raising=False)
     assert (
         cli.main(["--block-dir", str(config.block_dir), "--min-free-space", "1"]) == 1
     )
@@ -67,36 +66,6 @@ def test_disk_guard_stops_core_while_upload_is_blocked_and_skips_next_file(
     assert not already_archived(config, config.block_dir / "blk00001.dat")
     if stop_fails:
         assert "stop RPC unavailable" in caplog.text
-
-
-def test_disk_guard_interrupts_the_long_wait_between_passes(
-    config: Config, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    waiting = threading.Event()
-    stopped = threading.Event()
-    calls: list[str] = []
-
-    class SchedulerStop(threading.Event):
-        def wait(self, timeout: float | None = None) -> bool:
-            assert timeout == 1800
-            waiting.set()
-            assert super().wait(1), "Watchdog must wake the thirty-minute wait"
-            return True
-
-    monkeypatch.setattr(watchdog, "free_bytes", lambda _: 0 if waiting.is_set() else 10)
-    monkeypatch.setattr(watchdog, "stop_bitcoin", lambda _: stopped.set())
-    stop = SchedulerStop()
-
-    def run_pass() -> bool:
-        calls.append("pass")
-        return True
-
-    with watchdog.watch_disk(replace(config, min_free_space=1), stop) as tripped:
-        schedule.run_repeatedly(run_pass, 1800, stop)
-
-    assert tripped.is_set()
-    assert stopped.is_set()
-    assert calls == ["pass"]
 
 
 def test_disabled_watchdog_never_checks_or_stops_core(

@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import os
-import signal
 import subprocess
 import threading
-from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from bitcoin_block_archive import archive as archive_module
-from bitcoin_block_archive import bitcoin, cli, schedule, watchdog
+from bitcoin_block_archive import bitcoin, cli, watchdog
 from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.s3 import Uploader
@@ -304,72 +301,3 @@ def test_critical_disk_stops_core_before_starting_uploads(
 
     assert cli.main(["--block-dir", str(tmp_path), "--min-free-space", "1"]) == 1
     assert events == ["stop"]
-
-
-def test_interval_defaults_to_a_single_pass() -> None:
-    args = cli.Arguments()
-    cli.build_parser().parse_args([], namespace=args)
-
-    assert args.interval == 0
-
-
-def test_interval_comes_from_flag_or_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("ARCHIVE_INTERVAL", "30m")
-    args = cli.Arguments()
-    cli.build_parser().parse_args([], namespace=args)
-    assert args.interval == 1800
-
-    cli.build_parser().parse_args(["--interval", "0"], namespace=args)
-    assert args.interval == 0
-
-
-def test_invalid_interval_is_rejected() -> None:
-    with pytest.raises(SystemExit):
-        cli.build_parser().parse_args(["--interval", "soon"])
-
-
-def test_main_with_interval_repeats_passes_until_stopped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    passes: list[int] = []
-
-    def archive_then_stop(
-        _: Config, *, cancelled: threading.Event | None = None
-    ) -> None:
-        passes.append(len(passes))
-        if len(passes) == 2:
-            os.kill(os.getpid(), signal.SIGTERM)
-
-    monkeypatch.setattr(cli, "archive", archive_then_stop)
-    monkeypatch.setattr(cli, "run_repeatedly", fast_run_repeatedly)
-
-    assert cli.main(["--interval", "30m"]) == 0
-    assert passes == [0, 1]
-
-
-def test_main_with_interval_survives_a_failed_pass(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    passes: list[int] = []
-
-    def fail_then_stop(_: Config, *, cancelled: threading.Event | None = None) -> None:
-        passes.append(len(passes))
-        if len(passes) == 2:
-            os.kill(os.getpid(), signal.SIGTERM)
-        raise RuntimeError("S3 unavailable")
-
-    monkeypatch.setattr(cli, "archive", fail_then_stop)
-    monkeypatch.setattr(cli, "run_repeatedly", fast_run_repeatedly)
-
-    assert cli.main(["--interval", "30m"]) == 0
-    assert passes == [0, 1]
-
-
-def fast_run_repeatedly(
-    run_pass: Callable[[], bool], interval: int, stop: threading.Event
-) -> None:
-    """The real loop without the wait, after checking the requested interval."""
-    assert interval == 1800
-    schedule.run_repeatedly(run_pass, 0, stop)

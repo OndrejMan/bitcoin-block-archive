@@ -1,7 +1,7 @@
 # Mainnet analyses: status
 
-This repository is part of the mainnet analysis work (daily BlockSci index and
-Dumplings, BlockSci vs coinjoin-analysis comparison). What is done, what is
+This repository is part of the mainnet analysis work (manually started BlockSci
+index and Dumplings synchronization, BlockSci vs coinjoin-analysis comparison). What is done, what is
 missing and how to verify it is kept in one place:
 [../docs/mainnet-implementation-status.md](../docs/mainnet-implementation-status.md)
 (diplomka meta-repository). The design is in
