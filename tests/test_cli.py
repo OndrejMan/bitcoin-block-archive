@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 from dataclasses import replace
@@ -13,6 +14,7 @@ from bitcoin_block_archive.config import Config
 from bitcoin_block_archive.errors import ArchiveError, UnsafePruningError
 from bitcoin_block_archive.s3 import Uploader
 
+DESTINATION = "s3://bucket/bitcoin-mainnet/blocks"
 ENVIRONMENT_DEFAULTS = (
     "S3_ENDPOINT_URL",
     "S3_PROFILE",
@@ -28,6 +30,7 @@ ENVIRONMENT_DEFAULTS = (
 def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in ENVIRONMENT_DEFAULTS:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("S3_DESTINATION", DESTINATION)
 
 
 @pytest.fixture(autouse=True)
@@ -37,15 +40,16 @@ def one_tebibyte_free(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def parse(argv: list[str]) -> Config:
+    """The flags, with a destination unless the flags or the environment give one."""
+    if "--destination" not in argv and not os.environ.get("S3_DESTINATION"):
+        argv = [*argv, "--destination", DESTINATION]
     args = cli.Arguments()
     cli.build_parser().parse_args(argv, namespace=args)
     return cli.config_from_args(args)
 
 
 def test_defaults_map_into_config() -> None:
-    args = cli.Arguments()
-    cli.build_parser().parse_args([], namespace=args)
-    config = cli.config_from_args(args)
+    config = parse([])
 
     assert config.block_dir == Path("/var/lib/bitcoin/blocks")
     assert config.keep_latest_files == 2
@@ -97,7 +101,7 @@ def test_empty_environment_keeps_builtin_defaults(
     config = parse([])
 
     assert config.s3_endpoint == "https://s3.cl4.du.cesnet.cz"
-    assert config.s3_destination == "s3://xman-coinjoin-new/bitcoin-mainnet/blocks"
+    assert config.s3_destination == DESTINATION
     assert config.bitcoin_datadir == Path("/var/lib/bitcoin")
     assert config.bitcoin_rpc_host is None
     assert config.bitcoin_rpc_port is None
@@ -301,3 +305,9 @@ def test_critical_disk_stops_core_before_starting_uploads(
 
     assert cli.main(["--block-dir", str(tmp_path), "--min-free-space", "1"]) == 1
     assert events == ["stop"]
+
+
+def test_destination_has_no_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("S3_DESTINATION")
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args([], namespace=cli.Arguments())

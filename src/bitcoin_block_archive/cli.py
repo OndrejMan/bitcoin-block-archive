@@ -17,7 +17,6 @@ from bitcoin_block_archive.config import (
     DEFAULT_KEEP_LATEST_FILES,
     DEFAULT_MIN_FREE_SPACE,
     DEFAULT_RPC_TIMEOUT,
-    DEFAULT_S3_DESTINATION,
     DEFAULT_S3_ENDPOINT,
     DEFAULT_S3_PROFILE,
     DEFAULT_STATE_DIR,
@@ -130,8 +129,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--destination",
-        default=_env("S3_DESTINATION") or DEFAULT_S3_DESTINATION,
-        help="S3 prefix for block files (env: S3_DESTINATION).",
+        default=_env("S3_DESTINATION"),
+        required=not _env("S3_DESTINATION"),
+        help=(
+            "S3 prefix for block files, such as s3://bucket/bitcoin-mainnet/blocks "
+            "(env: S3_DESTINATION)."
+        ),
     )
 
     parser.add_argument(

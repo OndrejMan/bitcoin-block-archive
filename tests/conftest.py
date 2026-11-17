@@ -12,6 +12,12 @@ PREALLOCATED_BLOCK_FILE_SIZE = 4096
 
 
 @pytest.fixture(autouse=True)
+def archive_destination(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI has no default bucket; tests archive to a neutral one."""
+    monkeypatch.setenv("S3_DESTINATION", "s3://bucket/bitcoin-mainnet/blocks")
+
+
+@pytest.fixture(autouse=True)
 def node_without_automatic_pruning(monkeypatch: pytest.MonkeyPatch) -> None:
     """Archive passes check the node's pruning mode; tests run without a node."""
     monkeypatch.setattr(
