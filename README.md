@@ -11,7 +11,9 @@ archive pass after Dumplings has scanned the frozen height, and a `--prune-only`
 pass with `--prune-ceiling-file` and `--prune-retain-from-file` after BlockSci
 has indexed it. Every pass is a single run; there is no scheduler or long-lived
 service. The block files land incrementally under the S3 prefix given by
-`--destination`, one object and its sidecar per completed file.
+`--destination` (or `S3_DESTINATION`), one object and its sidecar per completed file.
+The destination has no default: an archiver started without one stops with an error
+instead of uploading into someone else's bucket.
 
 GitHub Actions validates and publishes the image for Linux amd64/arm64 after
 successful checks on `main`, `v*` tags or a manual run. Tags include `latest`,
