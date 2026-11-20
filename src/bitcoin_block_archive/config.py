@@ -16,6 +16,8 @@ DEFAULT_S3_PROFILE = "coinjoin"
 DEFAULT_KEEP_LATEST_FILES = 2
 DEFAULT_MIN_FREE_SPACE = 20 * 1024**3  # bytes; 0 disables the watchdog
 DEFAULT_RPC_TIMEOUT = 60
+# pruneblockchain deletes every pruned blk/rev pair before it answers.
+DEFAULT_PRUNE_TIMEOUT = 3600
 DEFAULT_UPLOAD_TIMEOUT = 3600
 DEFAULT_VERIFY_TIMEOUT = 60
 
@@ -52,6 +54,7 @@ class Config:
     prune_retain_from_file: int | None = None
 
     rpc_timeout: int = DEFAULT_RPC_TIMEOUT
+    prune_timeout: int = DEFAULT_PRUNE_TIMEOUT
     upload_timeout: int = DEFAULT_UPLOAD_TIMEOUT
     verify_timeout: int = DEFAULT_VERIFY_TIMEOUT
 
@@ -64,6 +67,7 @@ class Config:
             raise ValueError("min_free_space must not be negative")
         for name, value in (
             ("rpc_timeout", self.rpc_timeout),
+            ("prune_timeout", self.prune_timeout),
             ("upload_timeout", self.upload_timeout),
             ("verify_timeout", self.verify_timeout),
         ):

@@ -1,5 +1,6 @@
 """The parser cursor is a file boundary, not just a chain height."""
 
+import subprocess
 from dataclasses import replace
 
 import pytest
@@ -110,3 +111,18 @@ def test_prune_only_requires_both_consumer_limits() -> None:
     with pytest.raises(SystemExit) as raised:
         cli.main(["--prune-only"])
     assert raised.value.code == 2
+
+
+def test_pruneblockchain_gets_its_own_time_limit(
+    config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = replace(config, rpc_timeout=5, prune_timeout=900)
+    limits = []
+
+    def run(command: list[str], *, check: bool, timeout: int) -> object:
+        limits.append((command[-2], timeout))
+        return subprocess.CompletedProcess(command, 0, "123\n", "")
+
+    monkeypatch.setattr(bitcoin, "run", run)
+    assert bitcoin.prune_blockchain(config, 123) == 123
+    assert limits == [("pruneblockchain", 900)]

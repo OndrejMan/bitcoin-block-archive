@@ -16,6 +16,7 @@ from bitcoin_block_archive.config import (
     DEFAULT_BLOCK_DIR,
     DEFAULT_KEEP_LATEST_FILES,
     DEFAULT_MIN_FREE_SPACE,
+    DEFAULT_PRUNE_TIMEOUT,
     DEFAULT_RPC_TIMEOUT,
     DEFAULT_S3_ENDPOINT,
     DEFAULT_S3_PROFILE,
@@ -53,6 +54,7 @@ class Arguments(argparse.Namespace):
     min_free_space: int
     verbose: bool
     rpc_timeout: int
+    prune_timeout: int
     upload_timeout: int
     verify_timeout: int
 
@@ -227,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     for flag, default, description in (
         ("--rpc-timeout", DEFAULT_RPC_TIMEOUT, "Time limit for each bitcoin-cli call"),
+        (
+            "--prune-timeout",
+            DEFAULT_PRUNE_TIMEOUT,
+            "Time limit for the pruneblockchain call",
+        ),
         ("--upload-timeout", DEFAULT_UPLOAD_TIMEOUT, "Time limit for each S3 upload"),
         (
             "--verify-timeout",
@@ -263,6 +270,7 @@ def config_from_args(args: Arguments) -> Config:
         bitcoin_rpc_host=args.rpc_host,
         bitcoin_rpc_port=args.rpc_port,
         rpc_timeout=args.rpc_timeout,
+        prune_timeout=args.prune_timeout,
         upload_timeout=args.upload_timeout,
         verify_timeout=args.verify_timeout,
     )

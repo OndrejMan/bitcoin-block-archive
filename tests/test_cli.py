@@ -232,6 +232,7 @@ def test_ample_disk_does_not_stop_the_node(config: Config) -> None:
         ["--keep-latest-files", "-1"],
         ["--min-free-space", "nonsense"],
         ["--rpc-timeout", "0"],
+        ["--prune-timeout", "0"],
         ["--upload-timeout", "-1"],
         ["--verify-timeout", "invalid"],
     ],
@@ -255,15 +256,25 @@ def test_invalid_arguments_have_no_node_side_effects(
 def test_timeouts_map_into_config() -> None:
     args = cli.Arguments()
     cli.build_parser().parse_args(
-        ["--rpc-timeout", "5", "--upload-timeout", "600", "--verify-timeout", "10"],
+        [
+            "--rpc-timeout",
+            "5",
+            "--prune-timeout",
+            "900",
+            "--upload-timeout",
+            "600",
+            "--verify-timeout",
+            "10",
+        ],
         namespace=args,
     )
     config = cli.config_from_args(args)
-    assert (config.rpc_timeout, config.upload_timeout, config.verify_timeout) == (
-        5,
-        600,
-        10,
-    )
+    assert (
+        config.rpc_timeout,
+        config.prune_timeout,
+        config.upload_timeout,
+        config.verify_timeout,
+    ) == (5, 900, 600, 10)
 
 
 def test_node_control_failure_returns_unsuccessful_exit(

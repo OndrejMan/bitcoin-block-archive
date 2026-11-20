@@ -15,6 +15,7 @@ def cli(
     config: Config,
     *arguments: str,
     check: bool = True,
+    timeout: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [config.bitcoin_cli, f"-datadir={config.bitcoin_datadir}"]
 
@@ -28,7 +29,7 @@ def cli(
     return run(
         [*command, *arguments],
         check=check,
-        timeout=config.rpc_timeout,
+        timeout=config.rpc_timeout if timeout is None else timeout,
     )
 
 
@@ -105,7 +106,13 @@ def prune_blockchain(config: Config, height: int) -> int:
     Requires `prune=1` (manual pruning mode) in bitcoin.conf. Bitcoin Core
     clamps the request to keep the most recent blocks around the tip.
     """
-    result = cli(config, "pruneblockchain", str(height), check=False)
+    result = cli(
+        config,
+        "pruneblockchain",
+        str(height),
+        check=False,
+        timeout=config.prune_timeout,
+    )
 
     if result.returncode != 0:
         raise ArchiveError(f"pruneblockchain {height} failed: {result.stderr.strip()}")
