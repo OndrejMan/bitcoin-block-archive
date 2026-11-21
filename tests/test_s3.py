@@ -49,7 +49,9 @@ def test_upload_raises_on_failure(
     "failure",
     [
         None,
+        "packed",
         "missing",
+        "packed_empty",
         "size",
         "listing_json",
         "only_sidecar",
@@ -89,7 +91,13 @@ def test_remote_verification(
             # s5cmd lists every object under the key as a prefix, sidecar included.
             block = {"key": url, "size": 43 if failure == "size" else 42}
             sidecar = {"key": f"{url}.json", "size": 42}
+            packed = {
+                "key": f"{url}.zst",
+                "size": 0 if failure == "packed_empty" else 30,
+            }
             lines = [sidecar] if failure == "only_sidecar" else [block, sidecar]
+            if failure in {"packed", "packed_empty"}:
+                lines = [packed, sidecar]
             payload = "\n".join(json.dumps(line) for line in lines) + "\n"
             return subprocess.CompletedProcess(
                 command,
@@ -120,7 +128,7 @@ def test_remote_verification(
 
     monkeypatch.setattr(s3, "run", fake_run)
     client = s3.S5cmdClient(replace(config, verify_timeout=12))
-    if failure is None:
+    if failure in {None, "packed"}:
         client.verify(url, metadata)
         assert len(commands) == 2
         assert commands[0][-3:] == ["--json", "ls", url]

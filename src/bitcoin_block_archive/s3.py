@@ -89,7 +89,18 @@ class S5cmdClient:
             for line in result.stdout.splitlines()
             if line.strip()
         ]
-        remote = next((item for item in listed if item.get("key") == destination), {})
+        remote = next((item for item in listed if item.get("key") == destination), None)
+        if remote is None:
+            # coinjoin-pipeline's pack job replaces a pruned file by a .zst only
+            # after the packed copy unpacked to the sidecar's SHA-256, so a file
+            # restored from that copy is archived.
+            packed = next(
+                (item for item in listed if item.get("key") == f"{destination}.zst"), {}
+            )
+            packed_size = packed.get("size")
+            if type(packed_size) is int and packed_size > 0:
+                return
+            remote = {}
         if type(remote.get("size")) is not int or remote["size"] != size:
             raise ArchiveError(f"Remote size/key mismatch for {destination}")
 
